@@ -1,0 +1,105 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - when: never
+
+stages:
+  - quality
+  - test
+  - integration
+
+default:
+  interruptible: true
+
+# ANCHORS
+
+.pnpm-setup: &pnpm-setup
+  image: node:20-alpine
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.11.0 --activate
+  cache:
+    key:
+      files:
+        - frontend/pnpm-lock.yaml
+    paths:
+      - frontend/.pnpm-store/
+
+.frontend-changes: &frontend-changes
+  rules:
+    - changes:
+        - frontend/**/*
+
+.backend-changes: &backend-changes
+  rules:
+    - changes:
+        - backend/**/*
+
+# QUALITY STAGE
+
+backend-format:
+  stage: quality
+  image: python:3.13-slim
+  script:
+    - pip install ruff==0.11.10
+    - ruff format --check backend
+    - ruff check backend
+  <<: *backend-changes
+
+frontend-format:
+  stage: quality
+  <<: *pnpm-setup
+  script:
+    - cd frontend
+    - pnpm install --frozen-lockfile --store-dir .pnpm-store
+    - pnpm exec prettier --check .
+    - pnpm exec eslint .
+  <<: *frontend-changes
+
+# TEST STAGE
+
+backend-test:
+  stage: test
+  image: python:3.13-slim
+  script:
+    - pip install uv
+    - cd backend
+    - uv sync
+    - uv run pytest --cov=. --tb=short
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  <<: *backend-changes
+
+frontend-typecheck:
+  stage: test
+  <<: *pnpm-setup
+  script:
+    - cd frontend
+    - pnpm install --frozen-lockfile --store-dir .pnpm-store
+    - pnpm exec tsc --noEmit
+  <<: *frontend-changes
+
+# INTEGRATION STAGE
+
+backend-healthcheck:
+  stage: integration
+  image: python:3.13-slim
+  script:
+    - apt-get update && apt-get install -y curl
+    - pip install uv
+    - cd backend
+    - uv sync
+    - uv run python src/main.py &
+    - SERVER_PID=$!
+    - curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8000/health
+    - kill $SERVER_PID
+  <<: *backend-changes
+
+frontend-build-check:
+  stage: integration
+  <<: *pnpm-setup
+  script:
+    - cd frontend
+    - pnpm install --frozen-lockfile --store-dir .pnpm-store
+    - pnpm run build
+  <<: *frontend-changes
