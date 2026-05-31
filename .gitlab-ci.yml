@@ -42,7 +42,7 @@ backend-format:
   stage: quality
   image: python:3.13-slim
   script:
-    - pip install ruff==0.11.10
+    - pip install ruff==0.15.15
     - ruff format --check backend
     - ruff check backend
   <<: *backend-changes
