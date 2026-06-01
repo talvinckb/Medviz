@@ -11,3 +11,7 @@ wheels/
 
 # Testing and coverage reports
 .coverage
+
+# models
+*.glb
+*.gltf
