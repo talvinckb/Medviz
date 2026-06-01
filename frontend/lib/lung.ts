@@ -1,14 +1,14 @@
 // Util file to load and decode the lung model
 
-import { useFBX } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
 export function generate_lung_model() {
   // TODO: dynamic load model from backend ?
-  const fbx = useFBX("/models/lungs.fbx");
+  const { scene } = useGLTF("/models/lung_example_patient.glb");
 
-  // IMPORTANT: clone the FBX model to avoid mutating the original when applying materials
-  const clonedFbx = fbx.clone();
+  // IMPORTANT: clone the model to avoid mutating the original when applying materials
+  const clonedFbx = scene.clone();
 
   // Apply materials to give it a blue/green translucent look
   // Means that we override the materials of the original model with a custom one
