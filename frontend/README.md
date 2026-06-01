@@ -18,7 +18,7 @@ De manière générale, les commandes sont les mêmes, il suffit de remplacer `p
 
 ## 1. Installer Node.js
 
-Node.js s'installe depuis https://nodejs.org.
+Node.js s'installe depuis <https://nodejs.org>.
 
 `npm` est inclus automatiquement avec Node.js.
 
@@ -43,7 +43,7 @@ On a aussi besoin de build sharp pour faire fonctionner Next.js :
 pnpm approve-builds sharp # ou npm run approve-builds sharp
 ```
 
-## Configurer les variables d'environnement
+## 4. Configurer les variables d'environnement
 
 Par défaut, le projet se connecte à un backend qui tourne en local sur le port 8000 (`http://localhost:8000`).
 Si tu veux changer ça, tu peux créer un fichier `.env` à la racine du projet et y ajouter la variable d'environnement `NEXT_PUBLIC_BACKEND_URL` :
@@ -52,7 +52,7 @@ Si tu veux changer ça, tu peux créer un fichier `.env` à la racine du projet 
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
-## Lancer le projet
+## 5. Lancer le projet
 
 Pour démarrer le serveur de développement :
 
@@ -69,14 +69,30 @@ PORT=4000 pnpm dev # pour lancer sur le port 4000
 # avec npm : PORT=4000 npm run dev
 ```
 
-## Commandes utiles
+## 6. Qualité du Code & CI
+
+Avant de créer votre Merge Request, assurez-vous que votre code passe les vérifications de la CI :
+
+**1. Formater le code (Prettier & ESLint) :**
+
+```bash
+pnpm exec prettier --write .
+pnpm exec eslint . --fix
+```
+
+**2. Vérifier les types (TypeScript) :**
+
+```bash
+pnpm exec tsc --noEmit
+```
+
+## 7. Commandes utiles
 
 Normalement, pas besoin de le faire, mais au cas où :
 
 ```bash
 pnpm build # pour builder le projet
 pnpm start # pour lancer le projet en mode production (je crois que j'ai jamais utilisé cette commande)
-pnpm lint # pour vérifier le code avec ESLint
 
 # avec npm :
 npm run build
