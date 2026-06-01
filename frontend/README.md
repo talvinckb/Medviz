@@ -43,6 +43,15 @@ On a aussi besoin de build sharp pour faire fonctionner Next.js :
 pnpm approve-builds sharp # ou npm run approve-builds sharp
 ```
 
+## Configurer les variables d'environnement
+
+Par défaut, le projet se connecte à un backend qui tourne en local sur le port 8000 (`http://localhost:8000`).
+Si tu veux changer ça, tu peux créer un fichier `.env` à la racine du projet et y ajouter la variable d'environnement `NEXT_PUBLIC_BACKEND_URL` :
+
+```bash
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+```
+
 ## Lancer le projet
 
 Pour démarrer le serveur de développement :
