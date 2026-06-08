@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+medviz.db
 
 # Testing and coverage reports
 .coverage

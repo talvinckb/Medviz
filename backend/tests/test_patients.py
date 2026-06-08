@@ -1,0 +1,302 @@
+import os
+import io
+import sqlite3
+import zipfile
+import pytest
+from fastapi.testclient import TestClient
+
+import app.database
+from main import app as fastapi_app
+from app.database import get_db, init_db
+
+import app.services
+
+TEST_DB_PATH = "test_medviz.db"
+TEST_UPLOAD_DIR = "test_patients_data"
+
+
+@pytest.fixture(autouse=True)
+def setup_test_environment(monkeypatch, tmp_path):
+    """Configuration de l'environnement de test (DB temporaire et dossier d'uploads temporaire)."""
+
+    DB_TMP_PATH = os.path.join(tmp_path, TEST_DB_PATH)
+    UPLOAD_TMP_DIR = os.path.join(tmp_path, TEST_UPLOAD_DIR)
+
+    # 1. Configuration des chemins de test via monkeypatching
+    monkeypatch.setattr(app.database, "DB_PATH", DB_TMP_PATH)
+    monkeypatch.setattr(app.database, "UPLOAD_DIR", UPLOAD_TMP_DIR)
+    monkeypatch.setattr(app.services, "UPLOAD_DIR", UPLOAD_TMP_DIR)
+
+    # 2. Nettoyage initial des fichiers résiduels
+    if os.path.exists(DB_TMP_PATH):
+        os.remove(DB_TMP_PATH)
+    if os.path.exists(UPLOAD_TMP_DIR):
+        import shutil
+
+        shutil.rmtree(UPLOAD_TMP_DIR)
+
+    # 3. Initialisation de la base de données de test et du dossier d'upload
+    init_db()
+
+    yield
+
+    # 4. Nettoyage après la fin de la session de tests
+    if os.path.exists(DB_TMP_PATH):
+        try:
+            os.remove(DB_TMP_PATH)
+        except Exception:
+            pass
+
+    if os.path.exists(UPLOAD_TMP_DIR):
+        import shutil
+
+        try:
+            shutil.rmtree(UPLOAD_TMP_DIR)
+        except Exception:
+            pass
+
+
+@pytest.fixture
+def db_connection():
+    """Fournit une connexion directe à la base de données de test SQLite."""
+
+    conn = sqlite3.connect(app.database.DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+def client():
+    """Fournit un TestClient de FastAPI configuré pour utiliser la base de données de test."""
+
+    def override_get_db():
+        conn = sqlite3.connect(app.database.DB_PATH)
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    # Surcharger la dépendance get_db de FastAPI
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(fastapi_app) as test_client:
+        yield test_client
+
+    # Retirer la surcharge après le test
+    fastapi_app.dependency_overrides.clear()
+
+
+def create_mock_zip() -> io.BytesIO:
+    """Génère un fichier ZIP en mémoire pour simuler les DICOM."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        zip_file.writestr("dicom_001.dcm", "Faux contenu DICOM médical")
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+# ==========================================
+# TESTS DES ENDPOINTS
+# ==========================================
+
+
+def test_read_root(client):
+    """Vérifie le endpoint racine /."""
+    response = client.get("/")
+    assert response.status_code == 200
+    json_data = response.json()
+    assert "message" in json_data
+    assert "medviz" in json_data["message"].lower()
+
+
+def test_add_patient_success(client):
+    """Vérifie la création d'un patient avec métadonnées et ZIP de DICOM."""
+    zip_data = create_mock_zip()
+    response = client.post(
+        "/patients/upload",
+        data={"name": "Alice Liddell", "age": 10, "gender": "F"},
+        files={"file": ("alice_dicoms.zip", zip_data, "application/zip")},
+    )
+
+    assert response.status_code == 201
+    patient = response.json()
+    assert patient["name"] == "Alice Liddell"
+    assert patient["age"] == 10
+    assert patient["gender"] == "F"
+    assert patient["lung_volume"] is None
+    assert patient["sickness_value"] is None
+    assert "zip_path" in patient
+    assert os.path.normpath(patient["zip_path"]) == os.path.normpath(
+        f"{app.database.UPLOAD_DIR}/{patient['id']}.zip"
+    )
+
+    # Vérification que le fichier a bien été écrit sur le disque
+    assert os.path.exists(patient["zip_path"])
+
+
+def test_add_patient_invalid_extension(client):
+    """Vérifie qu'un fichier autre qu'un .zip est rejeté."""
+    txt_data = io.BytesIO(b"ceci est un simple fichier texte")
+    response = client.post(
+        "/patients/upload",
+        data={"name": "Bob", "age": 40, "gender": "M"},
+        files={"file": ("bob_notes.txt", txt_data, "text/plain")},
+    )
+
+    assert response.status_code == 400
+    assert "doit être un .zip" in response.json()["detail"].lower()
+
+
+def test_get_all_patients(client):
+    """Vérifie la récupération de la liste des IDs de patients."""
+    # 1. Liste initialement vide
+    response = client.get("/patients/")
+    assert response.status_code == 200
+    assert response.json() == []
+
+    # 2. Ajout de deux patients
+    zip_data_1 = create_mock_zip()
+    client.post(
+        "/patients/upload",
+        data={"name": "Patient Un", "age": 20, "gender": "M"},
+        files={"file": ("p1.zip", zip_data_1, "application/zip")},
+    )
+    zip_data_2 = create_mock_zip()
+    client.post(
+        "/patients/upload",
+        data={"name": "Patient Deux", "age": 30, "gender": "F"},
+        files={"file": ("p2.zip", zip_data_2, "application/zip")},
+    )
+
+    # 3. La liste doit contenir [1, 2]
+    response = client.get("/patients/")
+    assert response.status_code == 200
+    ids = response.json()
+    assert len(ids) == 2
+    assert 1 in ids
+    assert 2 in ids
+
+
+def test_get_patient_data_success(client, db_connection):
+    """Vérifie la récupération des détails d'un patient et son historique FVC."""
+    # 1. Ajout d'un patient
+    zip_data = create_mock_zip()
+    add_response = client.post(
+        "/patients/upload",
+        data={"name": "Charlie Bucket", "age": 12, "gender": "M"},
+        files={"file": ("charlie.zip", zip_data, "application/zip")},
+    )
+    patient_id = add_response.json()["id"]
+
+    # 2. Ajout de mesures FVC en base pour simuler un calcul ultérieur
+    cursor = db_connection.cursor()
+    cursor.execute(
+        "INSERT INTO fvc (patient_id, fvc, week_num, confidence) VALUES (?, 2.5, 2, 0.94)",
+        (patient_id,),
+    )
+    cursor.execute(
+        "INSERT INTO fvc (patient_id, fvc, week_num, confidence) VALUES (?, 2.7, 5, 0.97)",
+        (patient_id,),
+    )
+    db_connection.commit()
+
+    # 3. Récupération via l'API
+    response = client.get(f"/patients/{patient_id}/data")
+    assert response.status_code == 200
+    patient = response.json()
+    assert patient["name"] == "Charlie Bucket"
+    assert len(patient["fvc_records"]) == 2
+
+    # Vérification du tri par numéro de semaine
+    assert patient["fvc_records"][0]["week_num"] == 2
+    assert patient["fvc_records"][0]["fvc"] == 2.5
+    assert patient["fvc_records"][1]["week_num"] == 5
+    assert patient["fvc_records"][1]["fvc"] == 2.7
+
+
+def test_get_patient_data_not_found(client):
+    """Vérifie la réponse 404 lors de la récupération d'un patient inexistant."""
+    response = client.get("/patients/999/data")
+    assert response.status_code == 404
+    assert "introuvable" in response.json()["detail"].lower()
+
+
+def test_get_patient_lung_success(client):
+    """Vérifie le téléchargement du fichier ZIP de DICOM."""
+    # 1. Ajout d'un patient
+    zip_data = create_mock_zip()
+    add_response = client.post(
+        "/patients/upload",
+        data={"name": "Diana Prince", "age": 30, "gender": "F"},
+        files={"file": ("diana.zip", zip_data, "application/zip")},
+    )
+    patient_id = add_response.json()["id"]
+
+    # 2. Téléchargement du fichier
+    response = client.get(f"/patients/{patient_id}/lung")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert f"patient_{patient_id}.zip" in response.headers["content-disposition"]
+
+    # Vérification que le fichier reçu est bien un ZIP lisible
+    zip_received = zipfile.ZipFile(io.BytesIO(response.content))
+    assert "dicom_001.dcm" in zip_received.namelist()
+
+
+def test_get_patient_lung_not_found(client):
+    """Vérifie la réponse 404 lors du téléchargement pour un patient inexistant."""
+    response = client.get("/patients/999/lung")
+    assert response.status_code == 404
+
+
+def test_remove_patient_success(client, db_connection):
+    """Vérifie la suppression complète (BDD en cascade + fichier physique)."""
+    # 1. Ajout d'un patient et récupération des IDs
+    zip_data = create_mock_zip()
+    add_response = client.post(
+        "/patients/upload",
+        data={"name": "Evan Wright", "age": 28, "gender": "M"},
+        files={"file": ("evan.zip", zip_data, "application/zip")},
+    )
+    patient = add_response.json()
+    patient_id = patient["id"]
+    zip_path = patient["zip_path"]
+
+    # Ajout d'un FVC associé
+    cursor = db_connection.cursor()
+    cursor.execute(
+        "INSERT INTO fvc (patient_id, fvc, week_num, confidence) VALUES (?, 3.5, 1, 0.90)",
+        (patient_id,),
+    )
+    db_connection.commit()
+
+    # 2. On s'assure que le fichier ZIP existe avant la suppression
+    assert os.path.exists(zip_path)
+
+    # 3. Suppression via l'API
+    response = client.delete(f"/patients/{patient_id}")
+    assert response.status_code == 200
+    assert "supprimé avec succès" in response.json()["message"].lower()
+
+    # 4. Vérification que le fichier ZIP a été détruit physiquement
+    assert not os.path.exists(zip_path)
+
+    # 5. Vérification que le patient n'existe plus en BDD
+    cursor.execute("SELECT COUNT(*) FROM patient WHERE id = ?", (patient_id,))
+    assert cursor.fetchone()[0] == 0
+
+    # 6. Vérification que les lignes FVC ont bien été supprimées en cascade
+    cursor.execute("SELECT COUNT(*) FROM fvc WHERE patient_id = ?", (patient_id,))
+    assert cursor.fetchone()[0] == 0
+
+
+def test_remove_patient_not_found(client):
+    """Vérifie la réponse 404 lors de la suppression d'un patient inexistant."""
+    response = client.delete("/patients/999")
+    assert response.status_code == 404

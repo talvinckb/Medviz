@@ -89,7 +89,7 @@ backend-healthcheck:
     - pip install uv
     - cd backend
     - uv sync
-    - uv run python src/main.py &
+    - uv run python main.py &
     - SERVER_PID=$!
     - curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8000/health
     - kill $SERVER_PID
