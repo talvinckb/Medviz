@@ -1,14 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import {
-  Upload,
-  X,
-  FileArchive,
-  CheckCircle,
-  UserPlus,
-  ArrowRight,
-} from "lucide-react";
+import { Upload, FileArchive, UserPlus, ArrowRight, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,20 +9,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { uploadPatient } from "@/lib/api";
 
 interface DicomModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
-export function DicomModal({ open, onOpenChange }: DicomModalProps) {
-  const [step, setStep] = useState<"upload" | "uploading" | "form" | "success">(
-    "upload",
-  );
+export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
+  const [step, setStep] = useState<"upload" | "form" | "uploading">("upload");
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -41,34 +36,16 @@ export function DicomModal({ open, onOpenChange }: DicomModalProps) {
     setIsDragging(false);
   }, []);
 
-  const simulateUpload = useCallback(() => {
-    setStep("uploading");
-    setUploadProgress(0);
+  const handleFileProcess = useCallback((file: File | undefined) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setErrorMsg("Seuls les fichiers .zip sont acceptés.");
+      return;
+    }
     setErrorMsg("");
-
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setStep("form");
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 150);
+    setSelectedFile(file);
+    setStep("form");
   }, []);
-
-  const handleFileProcess = useCallback(
-    (file: File | undefined) => {
-      if (!file) return;
-      if (!file.name.toLowerCase().endsWith(".zip")) {
-        setErrorMsg("Seuls les fichiers .zip sont acceptés.");
-        return;
-      }
-      simulateUpload();
-    },
-    [simulateUpload],
-  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -92,12 +69,46 @@ export function DicomModal({ open, onOpenChange }: DicomModalProps) {
     setStep("upload");
     setUploadProgress(0);
     setErrorMsg("");
+    setSelectedFile(null);
     onOpenChange(false);
   };
 
-  const handleSubmitForm = (e: React.FormEvent) => {
+  const handleFinish = () => {
+    handleClose();
+    if (onSuccess) onSuccess();
+  };
+
+  const handleSubmitForm = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setStep("success");
+    if (!selectedFile) return;
+
+    const formData = new FormData(e.currentTarget);
+    formData.append("file", selectedFile);
+
+    // Add missing required fields not in original form
+    const name = formData.get("name") as string;
+    if (!name) {
+      formData.set("name", `Patient ${Date.now()}`); // fallback
+    }
+
+    setStep("uploading");
+    setUploadProgress(10); // Start progress
+
+    try {
+      // We simulate progress since fetch doesn't natively support upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => Math.min(prev + 10, 90));
+      }, 500);
+
+      await uploadPatient(formData);
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      handleFinish();
+    } catch (error: any) {
+      setErrorMsg(error.message || "Erreur lors de l'upload");
+      setStep("upload");
+    }
   };
 
   return (
@@ -179,6 +190,7 @@ export function DicomModal({ open, onOpenChange }: DicomModalProps) {
                   </label>
                   <input
                     required
+                    name="age"
                     type="number"
                     min="0"
                     max="150"
@@ -192,42 +204,13 @@ export function DicomModal({ open, onOpenChange }: DicomModalProps) {
                   </label>
                   <select
                     required
+                    name="gender"
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                   >
                     <option value="">Sélectionner...</option>
-                    <option value="H">Homme</option>
+                    <option value="M">Homme</option>
                     <option value="F">Femme</option>
                   </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Taille (cm)
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min="50"
-                    max="250"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="ex: 175"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Base FVC (L)
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="10"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="ex: 3.50"
-                  />
                 </div>
               </div>
 
@@ -237,13 +220,37 @@ export function DicomModal({ open, onOpenChange }: DicomModalProps) {
                 </label>
                 <select
                   required
+                  name="smoking_status"
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                 >
                   <option value="">Sélectionner...</option>
-                  <option value="non_fumeur">Non fumeur</option>
-                  <option value="fumeur">Fumeur actif</option>
-                  <option value="ancien_fumeur">Ancien fumeur</option>
+                  <option value="Never smoked">Jamais fumé</option>
+                  <option value="Ex-smoker">Ancien fumeur</option>
+                  <option value="Currently smokes">Fumeur actuel</option>
                 </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+                  Première prise de la FVC (mL)
+                  <div className="group relative flex items-center">
+                    <Info className="h-4 w-4 text-gray-400 hover:text-blue-500 cursor-help" />
+                    <div className="absolute bottom-full left-1/2 mb-2 hidden w-64 -translate-x-1/2 rounded-md bg-gray-800 p-3 text-xs text-white shadow-lg group-hover:block z-50 text-center leading-relaxed">
+                      La Capacité Vitale Forcée (FVC) est le volume maximal
+                      d'air expiré avec force après une inspiration profonde.
+                      <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                  </div>
+                </label>
+                <input
+                  required
+                  name="first_fvc"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="ex: 3500"
+                />
               </div>
 
               <div className="pt-4 flex justify-end">
@@ -256,28 +263,6 @@ export function DicomModal({ open, onOpenChange }: DicomModalProps) {
                 </button>
               </div>
             </form>
-          )}
-
-          {step === "success" && (
-            <div className="flex flex-col items-center gap-4 rounded-xl border border-green-200 bg-green-50 p-10">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <CheckCircle className="h-8 w-8 text-green-500" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-green-700">
-                  Dossier créé avec succès !
-                </p>
-                <p className="mt-1 text-xs text-green-600">
-                  Les données sont prêtes à être visualisées.
-                </p>
-              </div>
-              <button
-                onClick={handleClose}
-                className="mt-2 rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-600"
-              >
-                Terminer
-              </button>
-            </div>
           )}
         </div>
       </DialogContent>
