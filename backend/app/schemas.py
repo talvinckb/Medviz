@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class FVCRecord(BaseModel):
@@ -24,11 +25,14 @@ class PatientDetail(BaseModel):
         None,
         description="Volume du poumon (en litres)",  ##TODO: remove None
     )
+    mean_hu: Optional[float] = Field(None, description="Moyenne HU")
+    std_hu: Optional[float] = Field(None, description="Ecart type HU")
     sickness_value: Optional[float] = Field(
         None,
         description="Indice de gravité",  ##TODO: remove None
     )
     zip_path: str = Field(..., description="Path au DICOM (zip)")
+    glb_path: Optional[str] = Field(None, description="Path au fichier 3D (glb)")
     fvc_records: List[FVCRecord] = Field(
         default_factory=list, description="FVC par semaine"
     )
@@ -42,8 +46,11 @@ class PatientDetail(BaseModel):
                 "age": 45,
                 "gender": "M",
                 "lung_volume": None,
+                "mean_hu": None,
+                "std_hu": None,
                 "sickness_value": None,
-                "zip_path": "patients_data/1.zip",
+                "zip_path": "patients_data/1/slices.zip",
+                "glb_path": "patients_data/1/lung.glb",
                 "fvc_records": [
                     {"id": 10, "week_num": 1, "fvc": 3.2, "confidence": 0.95},
                     {"id": 11, "week_num": 4, "fvc": 3.4, "confidence": 0.98},

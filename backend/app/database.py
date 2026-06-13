@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 DB_PATH = "medviz.db"
 UPLOAD_DIR = "patients_data"
@@ -19,9 +19,12 @@ def init_db():
                 name TEXT NOT NULL,
                 age INTEGER NOT NULL,
                 gender TEXT NOT NULL,
-                lung_volume REAL, --TODO: remove nullable
-                sickness_value REAL, --TODO: remove nullable
-                zip_path TEXT NOT NULL
+                lung_volume REAL,
+                mean_hu REAL,
+                std_hu REAL,
+                sickness_value REAL,
+                zip_path TEXT NOT NULL,
+                glb_path TEXT
             );
         """)
 

@@ -1,17 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status
-from fastapi.responses import FileResponse
-import sqlite3
 import os
+import sqlite3
 from typing import List
 
 from app.database import get_db
+from app.processing.pipeline import process_patient_segmentation
 from app.schemas import PatientDetail
 from app.services import (
-    db_get_patient,
     db_add_patient,
-    db_remove_patient,
     db_get_all_patients,
+    db_get_patient,
+    db_remove_patient,
 )
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -20,6 +30,7 @@ router = APIRouter(prefix="/patients", tags=["patients"])
     "/upload", response_model=PatientDetail, status_code=status.HTTP_201_CREATED
 )
 def add_patient(
+    background_tasks: BackgroundTasks,
     name: str = Form(..., description="Nom patient"),
     age: int = Form(..., description="Âge du patient"),
     gender: str = Form(..., description="Sexe du patient"),
@@ -42,6 +53,9 @@ def add_patient(
 
     try:
         new_patient = db_add_patient(db, name, age, gender, file)
+        background_tasks.add_task(
+            process_patient_segmentation, new_patient["id"], new_patient["zip_path"]
+        )
         return new_patient
     except Exception as e:
         raise HTTPException(
@@ -78,8 +92,8 @@ def get_patient(patient_id: int, db: sqlite3.Connection = Depends(get_db)):
     return patient
 
 
-@router.get("/{patient_id}/lung")
-def get_patient_lung(patient_id: int, db: sqlite3.Connection = Depends(get_db)):
+@router.get("/{patient_id}/slices")
+def get_patient_slices(patient_id: int, db: sqlite3.Connection = Depends(get_db)):
     """
     Get the patient's DICOM ZIP file
     """
@@ -101,6 +115,32 @@ def get_patient_lung(patient_id: int, db: sqlite3.Connection = Depends(get_db)):
         path=zip_path,
         media_type="application/zip",
         filename=f"patient_{patient_id}.zip",
+    )
+
+
+@router.get("/{patient_id}/lung")
+def get_patient_lung(patient_id: int, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Get the patient's 3D mesh GLB file
+    """
+    patient = db_get_patient(db, patient_id)
+    if not patient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Patient avec l'ID {patient_id} introuvable.",
+        )
+
+    glb_path = patient["glb_path"]
+    if not glb_path or not os.path.exists(glb_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fichier 3D introuvable ou en cours de génération",
+        )
+
+    return FileResponse(
+        path=glb_path,
+        media_type="model/gltf-binary",
+        filename=f"patient_{patient_id}.glb",
     )
 
 
