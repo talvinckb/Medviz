@@ -5,10 +5,15 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache
+.ruff_cache
 
 # Virtual environments
 .venv
+
+# Storage
 medviz.db
+patients_data
 
 # Testing and coverage reports
 .coverage

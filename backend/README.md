@@ -10,7 +10,7 @@
 ```bash
 cd backend
 uv sync
-uv run python src/main.py
+uv run python main.py
 ```
 
 ## 3. Qualité du Code & CI

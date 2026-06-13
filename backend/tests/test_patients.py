@@ -1,15 +1,15 @@
-import os
 import io
+import os
 import sqlite3
 import zipfile
-import pytest
-from fastapi.testclient import TestClient
 
 import app.database
-from main import app as fastapi_app
-from app.database import get_db, init_db
-
 import app.services
+import numpy as np
+import pytest
+from app.database import get_db, init_db
+from fastapi.testclient import TestClient
+from main import app as fastapi_app
 
 TEST_DB_PATH = "test_medviz.db"
 TEST_UPLOAD_DIR = "test_patients_data"
@@ -133,7 +133,7 @@ def test_add_patient_success(client):
     assert patient["sickness_value"] is None
     assert "zip_path" in patient
     assert os.path.normpath(patient["zip_path"]) == os.path.normpath(
-        f"{app.database.UPLOAD_DIR}/{patient['id']}.zip"
+        f"{app.database.UPLOAD_DIR}/{patient['id']}/slices.zip"
     )
 
     # Vérification que le fichier a bien été écrit sur le disque
@@ -227,7 +227,7 @@ def test_get_patient_data_not_found(client):
     assert "introuvable" in response.json()["detail"].lower()
 
 
-def test_get_patient_lung_success(client):
+def test_get_patient_slices_success(client):
     """Vérifie le téléchargement du fichier ZIP de DICOM."""
     # 1. Ajout d'un patient
     zip_data = create_mock_zip()
@@ -239,7 +239,7 @@ def test_get_patient_lung_success(client):
     patient_id = add_response.json()["id"]
 
     # 2. Téléchargement du fichier
-    response = client.get(f"/patients/{patient_id}/lung")
+    response = client.get(f"/patients/{patient_id}/slices")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
     assert f"patient_{patient_id}.zip" in response.headers["content-disposition"]
@@ -249,9 +249,56 @@ def test_get_patient_lung_success(client):
     assert "dicom_001.dcm" in zip_received.namelist()
 
 
-def test_get_patient_lung_not_found(client):
+def test_get_patient_slices_not_found(client):
     """Vérifie la réponse 404 lors du téléchargement pour un patient inexistant."""
-    response = client.get("/patients/999/lung")
+    response = client.get("/patients/999/slices")
+    assert response.status_code == 404
+
+
+def test_get_patient_lung_success(client, db_connection):
+    """Vérifie le téléchargement du fichier GLB de maillage 3D."""
+    # 1. Ajout d'un patient
+    zip_data = create_mock_zip()
+    add_response = client.post(
+        "/patients/upload",
+        data={"name": "Bruce Wayne", "age": 40, "gender": "M"},
+        files={"file": ("bruce.zip", zip_data, "application/zip")},
+    )
+    patient_id = add_response.json()["id"]
+
+    # 2. Création d'un faux fichier .glb et mise à jour de la BDD
+    patient_dir = f"{app.database.UPLOAD_DIR}/{patient_id}"
+    os.makedirs(patient_dir, exist_ok=True)
+    glb_path = f"{patient_dir}/lung.glb"
+    with open(glb_path, "wb") as f:
+        f.write(b"dummy glb content")
+
+    cursor = db_connection.cursor()
+    cursor.execute(
+        "UPDATE patient SET glb_path = ? WHERE id = ?", (glb_path, patient_id)
+    )
+    db_connection.commit()
+
+    # 3. Téléchargement du fichier
+    response = client.get(f"/patients/{patient_id}/lung")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "model/gltf-binary"
+    assert f"patient_{patient_id}.glb" in response.headers["content-disposition"]
+    assert response.content == b"dummy glb content"
+
+
+def test_get_patient_lung_not_ready(client):
+    """Vérifie la réponse 404 si le GLB n'est pas encore généré ou introuvable."""
+    zip_data = create_mock_zip()
+    add_response = client.post(
+        "/patients/upload",
+        data={"name": "Clark Kent", "age": 35, "gender": "M"},
+        files={"file": ("clark.zip", zip_data, "application/zip")},
+    )
+    patient_id = add_response.json()["id"]
+
+    # Le GLB n'est pas prêt car la vraie pipeline en tâche de fond va crasher sur ce mock
+    response = client.get(f"/patients/{patient_id}/lung")
     assert response.status_code == 404
 
 
@@ -284,8 +331,9 @@ def test_remove_patient_success(client, db_connection):
     assert response.status_code == 200
     assert "supprimé avec succès" in response.json()["message"].lower()
 
-    # 4. Vérification que le fichier ZIP a été détruit physiquement
-    assert not os.path.exists(zip_path)
+    # 4. Vérification que le dossier du patient a été détruit physiquement
+    patient_dir = f"{app.database.UPLOAD_DIR}/{patient_id}"
+    assert not os.path.exists(patient_dir)
 
     # 5. Vérification que le patient n'existe plus en BDD
     cursor.execute("SELECT COUNT(*) FROM patient WHERE id = ?", (patient_id,))
@@ -300,3 +348,62 @@ def test_remove_patient_not_found(client):
     """Vérifie la réponse 404 lors de la suppression d'un patient inexistant."""
     response = client.delete("/patients/999")
     assert response.status_code == 404
+
+
+def test_background_segmentation_pipeline(client, db_connection, mocker):
+    """Vérifie que la pipeline de segmentation en background s'exécute et met à jour la BDD."""
+
+    # Mocking pydicom objects
+    class MockDicom:
+        def __init__(self, z_pos):
+            self.ImagePositionPatient = [0.0, 0.0, z_pos]
+            self.PatientName = ""
+            self.PatientID = ""
+            self.RescaleIntercept = -1024
+            self.RescaleSlope = 1
+            self.PixelSpacing = [1.0, 1.0]
+            # Create a 20x20 array (tissue in the middle, air on the outside)
+            arr = (
+                np.ones((20, 20), dtype=np.int16) * 1024
+            )  # air (1024 - 1024 = 0 HU normally, wait, 0 HU is water)
+            # Let's make air -1000 HU -> value = 24
+            arr = np.ones((20, 20), dtype=np.int16) * 24
+            # Make tissue in the center: 0 HU -> value = 1024
+            arr[5:15, 5:15] = 1024
+            self.pixel_array = arr
+
+    def mock_dcmread(path):
+        # Extract the index from 'dicom_X.dcm' to use as Z position
+        z_index = int(path.split("_")[-1].split(".")[0])
+        return MockDicom(float(z_index))
+
+    mocker.patch("pydicom.dcmread", side_effect=mock_dcmread)
+
+    # Generate a ZIP with 10 mocked slices
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        for i in range(10):
+            zip_file.writestr(f"dicom_{i}.dcm", "dummy")
+    zip_buffer.seek(0)
+
+    # 1. Upload the patient
+    add_response = client.post(
+        "/patients/upload",
+        data={"name": "Frank", "age": 55, "gender": "M"},
+        files={"file": ("frank.zip", zip_buffer, "application/zip")},
+    )
+    assert add_response.status_code == 201
+    patient_id = add_response.json()["id"]
+
+    # In Starlette TestClient, background tasks run synchronously immediately after the response is generated.
+    # Therefore, by this point, the pipeline should have finished updating the database.
+
+    # 2. Verify that the features are populated
+    get_response = client.get(f"/patients/{patient_id}/data")
+    assert get_response.status_code == 200
+
+    patient_data = get_response.json()
+    assert patient_data["lung_volume"] is not None
+    assert patient_data["sickness_value"] is not None
+    assert patient_data["mean_hu"] is not None
+    assert patient_data["std_hu"] is not None
