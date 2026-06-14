@@ -4,11 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from app.database import init_db
+from app.logger import logger
 from app.routes import router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("MedViz API started")
     init_db()
     # TODO: load ml model
     yield

@@ -15,6 +15,9 @@ wheels/
 medviz.db
 patients_data
 
+# Logging
+medviz.log
+
 # Testing and coverage reports
 .coverage
 

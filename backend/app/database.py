@@ -1,14 +1,19 @@
 import os
 import sqlite3
 
+from app.logger import logger
+
 DB_PATH = "medviz.db"
 UPLOAD_DIR = "patients_data"
 
 
 def init_db():
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    """Initialize the database and create necessary directories."""
+    logger.info("Initializing database and directories")
 
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
@@ -40,11 +45,16 @@ def init_db():
         """)
 
         conn.commit()
+        logger.info("Database tables initialized")
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
     finally:
         conn.close()
 
 
 def get_db_connection():
+    """Get a new database connection."""
+    logger.debug("Creating new database connection")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
@@ -52,8 +62,11 @@ def get_db_connection():
 
 
 def get_db():
+    """Dependency to get a database connection (for FastAPI)."""
+    logger.debug("Getting database connection for FastAPI dependency")
     conn = get_db_connection()
     try:
         yield conn
     finally:
         conn.close()
+        logger.debug("Database connection closed")
