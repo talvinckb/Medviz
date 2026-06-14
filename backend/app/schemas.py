@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+from app.logger import logger
 
 
 class FVCRecord(BaseModel):
@@ -58,3 +59,6 @@ class PatientDetail(BaseModel):
             }
         },
     }
+
+
+logger.info("Pydantic models for FVCRecord and PatientDetail are configured")

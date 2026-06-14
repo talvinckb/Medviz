@@ -6,6 +6,7 @@ import numpy as np
 import pydicom
 import scipy
 from app.database import get_db_connection, UPLOAD_DIR
+from app.logger import logger
 from app.services import db_update_patient_features
 from skimage import measure, morphology
 from sklearn.cluster import KMeans
@@ -16,6 +17,7 @@ def load_and_sort_scan(patient_id, base_dir):
     """
     Loads DICOM files from a directory and sorts them spatially.
     """
+    logger.info(f"Loading and sorting DICOM slices for patient {patient_id}")
     filenames = os.listdir(base_dir)
     slices = []
     for f in filenames:
@@ -28,10 +30,12 @@ def load_and_sort_scan(patient_id, base_dir):
             slices.append(dicom_slice)
         except Exception:
             # Ignore non-dicom files
+            logger.warning(f"Ignoring non-DICOM file: {f}")
             pass
 
     # Sort using physical Z coordinate instead of InstanceNumber for safety
     slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
+    logger.info(f"Loaded {len(slices)} DICOM slices for patient {patient_id}")
     return slices
 
 
@@ -39,6 +43,7 @@ def get_pixels_hu(slices):
     """
     Converts pixel arrays to Hounsfield Units (HU).
     """
+    logger.info("Converting pixel arrays to Hounsfield Units (HU)")
     image = np.stack([s.pixel_array for s in slices]).astype(np.int16)
 
     # Set outside scanner pixels to Air (-1000 HU) instead of 0
@@ -62,11 +67,15 @@ def resample_volume(image, slices, new_spacing=[1, 1, 1]):
     """
     Resamples the 3D volume to an isotropic spacing.
     """
+    logger.info("Resampling 3D volume to isotropic spacing")
     try:
         z_spacing = np.abs(
             slices[0].ImagePositionPatient[2] - slices[1].ImagePositionPatient[2]
         )
     except AttributeError:
+        logger.error(
+            "Failed to resample volume: slices do not have ImagePositionPatient"
+        )
         z_spacing = slices[0].SliceThickness
 
     spacing = np.array(
@@ -91,6 +100,7 @@ def generate_lung_mask(volume_3d):
     """
     Generates a 3D boolean mask of the lungs.
     """
+    logger.info("Generating a 3D boolean mask of the lungs")
     z_slices, row_size, col_size = volume_3d.shape
     mask_3d = np.zeros_like(volume_3d, dtype=np.int8)
 
@@ -153,6 +163,7 @@ def extract_radiomics_features(volume_3d, mask_3d):
     """
     Extracts radiomics features from the segmented lung volume.
     """
+    logger.info("Extracting radiomics features from the segmented lung volume")
     lung_pixels = volume_3d[mask_3d]
 
     if len(lung_pixels) == 0:
@@ -172,24 +183,25 @@ def extract_radiomics_features(volume_3d, mask_3d):
 
 def create_3d_file(mask_3d, output_path="lungs.glb", step_size=2):
     """
-    Crée un fichier 3D (par défaut .glb) à partir d'un masque 3D.
+    Creates a 3D file (default extension .glb) from a 3D mask.
     """
+    logger.info("Creating a 3D file from a 3D mask")
     if np.sum(mask_3d) == 0:
-        print("Erreur: Le masque 3D est vide. Impossible de générer un maillage.")
+        logger.error("The 3D mask is empty. Unable to generate a mesh")
         return False
 
-    print("Génération du maillage 3D avec marching cubes...")
+    logger.info("Generating a 3D mesh using the marching cubes algorithm")
     try:
         verts, faces, normals, values = measure.marching_cubes(
             mask_3d, step_size=step_size
         )
-    except ValueError as e:
-        print(f"Erreur lors de la génération du maillage: {e}")
+    except ValueError:
+        logger.error("Mesh generation with marching cubes algorithm failed")
         return False
 
     mesh = trimesh.Trimesh(vertices=verts, faces=faces, vertex_normals=normals)
     mesh.export(output_path)
-    print(f"Modèle 3D sauvegardé sous {output_path}")
+    logger.info(f"3D model saved to {output_path}")
     return True
 
 
@@ -198,21 +210,22 @@ def process_patient_segmentation(patient_id: int, zip_path: str):
     Main function to run the segmentation pipeline for a patient.
     Extracts the zip to a temporary folder, runs segmentation, and returns the volume and mask.
     """
-    print(f"Starting segmentation pipeline for patient {patient_id}...")
+    logger.info(f"Starting segmentation pipeline for patient {patient_id}")
     with tempfile.TemporaryDirectory() as tmpdirname:
         # 1. Unzip
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(tmpdirname)
+            logger.info(f"Unzipped DICOM files for patient {patient_id}")
         except zipfile.BadZipFile:
-            print(f"Error: Bad zip file for patient {patient_id}")
+            logger.error(f"Bad zip file for patient {patient_id}")
             return None, None
 
         # 2. Pipeline
         try:
             slices = load_and_sort_scan(patient_id, tmpdirname)
             if not slices:
-                print(f"Error: No valid DICOM slices found for patient {patient_id}")
+                logger.error(f"No valid DICOM slices found for patient {patient_id}")
                 return None, None
 
             hu_volume = get_pixels_hu(slices)
@@ -226,14 +239,16 @@ def process_patient_segmentation(patient_id: int, zip_path: str):
             std_hu = features[2]
             sickness_value = features[3]  # fibrosis ratio
 
-            print(
-                f"Segmentation complete for patient {patient_id}. Lung Volume: {lung_volume} cm3, Fibrosis Ratio: {sickness_value}"
+            logger.info(
+                f"Segmentation complete for patient {patient_id}. "
+                f"Lung Volume: {lung_volume} cm3, Fibrosis Ratio: {sickness_value}"
             )
 
             # 4. Generate 3D Model
             glb_path = f"{UPLOAD_DIR}/{patient_id}/lung.glb"
             if not create_3d_file(mask_3d, glb_path):
                 glb_path = None
+                logger.warning(f"Failed to generate 3D model for patient {patient_id}")
 
             # 5. Update Database
             conn = get_db_connection()
@@ -247,11 +262,14 @@ def process_patient_segmentation(patient_id: int, zip_path: str):
                     sickness_value,
                     glb_path,
                 )
+                logger.info(f"Updated database with features for patient {patient_id}")
             finally:
                 conn.close()
 
             return resampled_volume, mask_3d
 
         except Exception as e:
-            print(f"Pipeline error for patient {patient_id}: {str(e)}")
+            logger.error(
+                f"Pipeline error for patient {patient_id}: {str(e)}", exc_info=True
+            )
             return None, None
