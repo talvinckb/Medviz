@@ -36,7 +36,7 @@ export function DiseaseScore({ score }: DiseaseScoreProps) {
 
   return (
     <Card className="h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
-      <CardHeader className="pb-0 pt-6 px-6">
+      <CardHeader className="pb-0 pt-4 px-6">
         <CardTitle className="flex items-center gap-2 text-[15px] font-semibold text-gray-800">
           Score de maladie (GI-2012)
           <button

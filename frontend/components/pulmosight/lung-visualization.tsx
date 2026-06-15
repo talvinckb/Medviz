@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useRef } from "react";
+import React, { useState, Suspense, useRef } from "react";
 import {
   Box,
   Layers,
@@ -12,16 +12,56 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Center, Environment } from "@react-three/drei";
+import { OrbitControls, Center, Environment, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { generate_lung_model } from "@/lib/lung";
 
-function LungModel() {
-  const lungModel = generate_lung_model();
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error(
+      "ErrorBoundary caught an error (probably 404 model not found)",
+      error,
+    );
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
+const ModelFallback = () => (
+  <Html center>
+    <div className="flex flex-col items-center justify-center rounded-xl bg-white/90 p-6 text-center shadow-lg backdrop-blur-sm border border-gray-200 w-64">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mb-3"></div>
+      <p className="text-gray-800 font-semibold">Modèle non disponible</p>
+      <p className="text-gray-500 text-xs mt-1">
+        Le modèle 3D est peut-être en cours de génération ou introuvable.
+      </p>
+    </div>
+  </Html>
+);
+
+function LungModel({ patientId }: { patientId: number }) {
+  const lungModel = generate_lung_model(patientId);
   return <primitive object={lungModel} scale={0.1} />;
 }
 
-export function LungVisualization() {
+export function LungVisualization({ patientId }: { patientId: number }) {
   const [viewMode, setViewMode] = useState<"3d" | "2d">("3d");
   const controlsRef = useRef<any>(null);
 
@@ -77,7 +117,7 @@ export function LungVisualization() {
 
   return (
     <Card className="relative h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
-      <CardHeader className="pb-4 pt-6 px-6">
+      <CardHeader className="pb-2 pt-4 px-6">
         <CardTitle className="text-[15px] font-semibold text-gray-800">
           Visualisation 3D des poumons
         </CardTitle>
@@ -117,7 +157,9 @@ export function LungVisualization() {
                 <ambientLight intensity={0.5} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Center>
-                  <LungModel />
+                  <ErrorBoundary fallback={<ModelFallback />}>
+                    <LungModel patientId={patientId} />
+                  </ErrorBoundary>
                 </Center>
               </Suspense>
               <OrbitControls ref={controlsRef} makeDefault />

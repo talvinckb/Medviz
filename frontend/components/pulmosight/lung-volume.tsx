@@ -18,7 +18,7 @@ export function LungVolume({ volume, percentage }: LungVolumeProps) {
 
   return (
     <Card className="h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
-      <CardHeader className="pb-0 px-6">
+      <CardHeader className="pb-0 pt-4 px-6">
         <CardTitle className="text-[15px] font-semibold text-gray-800">
           Volume pulmonaire
         </CardTitle>
@@ -27,7 +27,7 @@ export function LungVolume({ volume, percentage }: LungVolumeProps) {
         <div className="flex flex-col gap-1">
           <p className="text-[14px] text-gray-500 font-medium">Volume mesuré</p>
           <p className="text-[40px] font-extrabold text-[#1e293b] tracking-tight">
-            {volume.toFixed(2)} L
+            {volume.toFixed(2)} mL
           </p>
         </div>
 

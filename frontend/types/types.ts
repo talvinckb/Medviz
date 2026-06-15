@@ -2,24 +2,27 @@ export interface HealthCheckResponse {
   status: string;
 }
 
-export interface FCV_Data {
-  fvc: number;
+export interface FVCRecord {
+  id: number;
   week_num: number;
+  fvc: number;
   confidence: number;
 }
 
-export interface Patient {
+export interface PatientDetail {
   id: number;
   name: string;
   age: number;
   gender: string;
-  fcv_data: FCV_Data[];
-
-  lung_volume: number;
-  sickness_value: number;
+  lung_volume: number | null;
+  mean_hu: number | null;
+  std_hu: number | null;
+  sickness_value: number | null;
+  zip_path: string;
+  glb_path: string | null;
+  fvc_records: FVCRecord[];
 }
 
-// to see how we communicate with the backend the 3d model
 export interface Lung3D {}
 
 export interface SlideData {

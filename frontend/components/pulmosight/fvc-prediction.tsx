@@ -37,7 +37,7 @@ export function FVCPrediction({ data }: FVCPredictionProps) {
 
   return (
     <Card className="h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
-      <CardHeader className="pb-4 pt-6 px-6">
+      <CardHeader className="pb-2 pt-4 px-6">
         <CardTitle className="flex items-center gap-2 text-[15px] font-semibold text-gray-800">
           Prédiction de la FVC au cours du temps
           <button

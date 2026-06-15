@@ -2,10 +2,18 @@
 
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import { API_URL } from "@/lib/api";
 
-export function generate_lung_model() {
-  // TODO: dynamic load model from backend ?
-  const { scene } = useGLTF("/models/lung_example_patient.glb");
+export function generate_lung_model(patientId: number) {
+  const lungModelUrl = `${API_URL}/patients/${patientId}/lung`;
+
+  const lungModel = useGLTF(lungModelUrl);
+  if (!lungModel) {
+    // this happens when the model is not yet generated on the backend
+    throw new Error(`Lung model for patient ${patientId} not found.`);
+  }
+
+  const { scene } = lungModel;
 
   // IMPORTANT: clone the model to avoid mutating the original when applying materials
   const clonedFbx = scene.clone();
