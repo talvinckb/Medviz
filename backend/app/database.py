@@ -12,8 +12,8 @@ def init_db():
     logger.info("Initializing database and directories")
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
 
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
@@ -55,7 +55,7 @@ def init_db():
 def get_db_connection():
     """Get a new database connection."""
     logger.debug("Creating new database connection")
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
