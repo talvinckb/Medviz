@@ -5,12 +5,12 @@ import zipfile
 import numpy as np
 import pydicom
 import scipy
-from app.database import get_db_connection, UPLOAD_DIR
+import trimesh
+from app.database import UPLOAD_DIR, get_db_connection
 from app.logger import logger
 from app.services import db_update_patient_features
 from skimage import measure, morphology
 from sklearn.cluster import KMeans
-import trimesh
 
 
 def load_and_sort_scan(patient_id, base_dir):
@@ -18,20 +18,20 @@ def load_and_sort_scan(patient_id, base_dir):
     Loads DICOM files from a directory and sorts them spatially.
     """
     logger.info(f"Loading and sorting DICOM slices for patient {patient_id}")
-    filenames = os.listdir(base_dir)
     slices = []
-    for f in filenames:
-        path = os.path.join(base_dir, f)
-        try:
-            dicom_slice = pydicom.dcmread(path)
-            # Anonymize
-            dicom_slice.PatientName = "ANONYMOUS"
-            dicom_slice.PatientID = str(patient_id)
-            slices.append(dicom_slice)
-        except Exception:
-            # Ignore non-dicom files
-            logger.warning(f"Ignoring non-DICOM file: {f}")
-            pass
+    for root, _, files in os.walk(base_dir):
+        for f in files:
+            path = os.path.join(root, f)
+            try:
+                dicom_slice = pydicom.dcmread(path)
+                # Anonymize
+                dicom_slice.PatientName = "ANONYMOUS"
+                dicom_slice.PatientID = str(patient_id)
+                slices.append(dicom_slice)
+            except Exception:
+                # Ignore non-dicom files
+                logger.warning(f"Ignoring non-DICOM file: {f}")
+                pass
 
     # Sort using physical Z coordinate instead of InstanceNumber for safety
     slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))

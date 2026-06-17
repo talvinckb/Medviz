@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app.logger import logger
@@ -35,17 +35,28 @@ def add_patient(
     name: str = Form(..., description="Nom patient"),
     age: int = Form(..., description="Âge du patient"),
     gender: str = Form(..., description="Sexe du patient"),
-    file: UploadFile = File(..., description="ZIP contenant les fichiers DICOM"),
+    file: Optional[UploadFile] = File(
+        None, description="ZIP contenant les fichiers DICOM"
+    ),
+    files: Optional[List[UploadFile]] = File(
+        None, description="Fichiers DICOM individuels"
+    ),
     db: sqlite3.Connection = Depends(get_db),
 ):
     """
-    Add a new patient with their zip DICOM file
+    Add a new patient with their zip DICOM file or multiple DICOM files
     """
     logger.info(
         f"Upload request received for patient: name={name}, age={age}, gender={gender}"
     )
 
-    if not file.filename or not file.filename.lower().endswith(".zip"):
+    if not file and not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vous devez fournir un fichier .zip ou plusieurs fichiers .dcm.",
+        )
+
+    if file and (not file.filename or not file.filename.lower().endswith(".zip")):
         logger.warning(f"Invalid file type for patient upload: {file.filename}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -59,7 +70,7 @@ def add_patient(
         )
 
     try:
-        new_patient = db_add_patient(db, name, age, gender, file)
+        new_patient = db_add_patient(db, name, age, gender, file, files)
         logger.info(
             f"Patient created successfully: id={new_patient['id']}, zip_path={new_patient['zip_path']}"
         )

@@ -1,7 +1,7 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
 from app.logger import logger
+from pydantic import BaseModel, Field
 
 
 class FVCRecord(BaseModel):
