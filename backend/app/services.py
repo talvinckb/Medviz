@@ -1,6 +1,7 @@
 import os
 import shutil
 import sqlite3
+import zipfile
 from typing import List, Optional
 
 from app.database import UPLOAD_DIR
@@ -34,7 +35,12 @@ def db_get_all_patients(conn: sqlite3.Connection) -> List[int]:
 
 
 def db_add_patient(
-    conn: sqlite3.Connection, name: str, age: int, gender: str, file: UploadFile
+    conn: sqlite3.Connection,
+    name: str,
+    age: int,
+    gender: str,
+    file: Optional[UploadFile],
+    files: Optional[List[UploadFile]] = None,
 ) -> dict:
     """
     Add a patient in DB, save the ZIP file on disk and store the path in DB
@@ -57,9 +63,17 @@ def db_add_patient(
     zip_path = f"{patient_dir}/slices.zip"
 
     try:
-        with open(zip_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        logger.info(f"ZIP file saved for patient {patient_id} at {zip_path}")
+        if file:
+            with open(zip_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            logger.info(f"ZIP file saved for patient {patient_id} at {zip_path}")
+        elif files:
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                for f in files:
+                    zipf.writestr(f.filename, f.file.read())
+            logger.info(
+                f"Created ZIP file from {len(files)} files for patient {patient_id} at {zip_path}"
+            )
     except Exception as e:
         cursor.execute("DELETE FROM patient WHERE id = ?", (patient_id,))
         conn.commit()

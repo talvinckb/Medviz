@@ -140,6 +140,44 @@ def test_add_patient_success(client):
     assert os.path.exists(patient["zip_path"])
 
 
+def test_add_patient_multiple_files_success(client):
+    """Vérifie la création d'un patient avec de multiples fichiers DICOM au lieu d'un ZIP."""
+    dcm1 = io.BytesIO(b"faux contenu 1")
+    dcm2 = io.BytesIO(b"faux contenu 2")
+    response = client.post(
+        "/patients/upload",
+        data={"name": "Multi File", "age": 45, "gender": "M"},
+        files=[
+            ("files", ("dossier/image1.dcm", dcm1, "application/dicom")),
+            ("files", ("dossier/image2.dcm", dcm2, "application/dicom")),
+        ],
+    )
+
+    assert response.status_code == 201
+    patient = response.json()
+    assert patient["name"] == "Multi File"
+    assert "zip_path" in patient
+    assert os.path.exists(patient["zip_path"])
+
+    # Vérifie que le zip généré par le backend contient bien les fichiers avec l'arborescence
+    with zipfile.ZipFile(patient["zip_path"], "r") as zipf:
+        names = zipf.namelist()
+        assert "dossier/image1.dcm" in names
+        assert "dossier/image2.dcm" in names
+
+
+def test_add_patient_missing_files(client):
+    """Vérifie le rejet si aucun fichier n'est fourni."""
+    response = client.post(
+        "/patients/upload",
+        data={"name": "No File", "age": 45, "gender": "M"},
+    )
+    assert response.status_code == 400
+    assert (
+        "fichier .zip ou plusieurs fichiers .dcm" in response.json()["detail"].lower()
+    )
+
+
 def test_add_patient_invalid_extension(client):
     """Vérifie qu'un fichier autre qu'un .zip est rejeté."""
     txt_data = io.BytesIO(b"ceci est un simple fichier texte")
@@ -379,11 +417,12 @@ def test_background_segmentation_pipeline(client, db_connection, mocker):
 
     mocker.patch("pydicom.dcmread", side_effect=mock_dcmread)
 
-    # Generate a ZIP with 10 mocked slices
+    # Generate a ZIP with 10 mocked slices, distributed in subdirectories to test os.walk
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         for i in range(10):
-            zip_file.writestr(f"dicom_{i}.dcm", "dummy")
+            folder_name = f"folder{i % 2}"
+            zip_file.writestr(f"{folder_name}/dicom_{i}.dcm", "dummy")
     zip_buffer.seek(0)
 
     # 1. Upload the patient

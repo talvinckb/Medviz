@@ -23,8 +23,10 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[] | null>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -44,6 +46,22 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
     }
     setErrorMsg("");
     setSelectedFile(file);
+    setSelectedFiles(null);
+    setStep("form");
+  }, []);
+
+  const handleFolderProcess = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const dcmFiles = Array.from(files).filter((f) =>
+      f.name.toLowerCase().endsWith(".dcm"),
+    );
+    if (dcmFiles.length === 0) {
+      setErrorMsg("Aucun fichier .dcm trouvé dans le dossier.");
+      return;
+    }
+    setErrorMsg("");
+    setSelectedFiles(dcmFiles);
+    setSelectedFile(null);
     setStep("form");
   }, []);
 
@@ -51,10 +69,19 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      handleFileProcess(file);
+      const fileList = e.dataTransfer.files;
+      if (fileList && fileList.length > 0) {
+        if (
+          fileList.length === 1 &&
+          fileList[0].name.toLowerCase().endsWith(".zip")
+        ) {
+          handleFileProcess(fileList[0]);
+        } else {
+          handleFolderProcess(fileList);
+        }
+      }
     },
-    [handleFileProcess],
+    [handleFileProcess, handleFolderProcess],
   );
 
   const handleFileSelect = useCallback(
@@ -70,6 +97,7 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
     setUploadProgress(0);
     setErrorMsg("");
     setSelectedFile(null);
+    setSelectedFiles(null);
     onOpenChange(false);
   };
 
@@ -80,10 +108,17 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
 
   const handleSubmitForm = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    if (!selectedFile && (!selectedFiles || selectedFiles.length === 0)) return;
 
     const formData = new FormData(e.currentTarget);
-    formData.append("file", selectedFile);
+
+    if (selectedFile) {
+      formData.append("file", selectedFile);
+    } else if (selectedFiles) {
+      selectedFiles.forEach((f) => {
+        formData.append("files", f, f.webkitRelativePath || f.name);
+      });
+    }
 
     // Add missing required fields not in original form
     const name = formData.get("name") as string;
@@ -133,8 +168,7 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-10 transition-colors ${
+              className={`flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-10 transition-colors ${
                 isDragging
                   ? "border-blue-500 bg-blue-50"
                   : "border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/50"
@@ -147,18 +181,43 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
                 ref={fileInputRef}
                 onChange={handleFileSelect}
               />
+              <input
+                type="file"
+                className="hidden"
+                ref={folderInputRef}
+                // @ts-ignore
+                webkitdirectory=""
+                directory=""
+                onChange={(e) => handleFolderProcess(e.target.files)}
+              />
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
                 <Upload className="h-8 w-8 text-blue-500" />
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-gray-700">
-                  Glissez-déposez votre archive ZIP
+                  Glissez-déposez votre archive ZIP ou vos fichiers .dcm
                 </p>
                 <p className="mt-1 text-sm text-gray-500">
                   ou cliquez pour parcourir
                 </p>
-                <p className="mt-2 text-xs text-red-500 font-medium">
-                  {errorMsg || "Format .zip uniquement"}
+                <div className="mt-4 flex gap-4 justify-center">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    Archive .zip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    className="rounded-md bg-white px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    Dossier (.dcm)
+                  </button>
+                </div>
+                <p className="mt-4 text-xs text-red-500 font-medium h-4">
+                  {errorMsg}
                 </p>
               </div>
             </div>
