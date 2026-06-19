@@ -147,6 +147,19 @@ def generate_lung_mask(volume_3d):
             continue
         img_norm = (img - c_mean) / c_std
 
+        # 1. On identifie le padding artificiel (le coin 0,0 est toujours du padding ou de l'air pur)
+        padding_val = img[0, 0]
+        padding_mask = np.abs(img - padding_val) < 10
+        fov_mask = ~padding_mask  # La vraie zone du scanner
+
+        # 2. On remplit les trous (le patient) pour obtenir un cercle plein
+        fov_mask = scipy.ndimage.binary_fill_holes(fov_mask)
+
+        # 3. On extrait une bordure de 5 pixels à l'intérieur de ce cercle
+        eroded_fov = morphology.erosion(fov_mask, np.ones([11, 11]))
+        fov_boundary = fov_mask & ~eroded_fov
+
+        # Binarisation pour trouver tout l'air (poumons + extérieur)
         thresh_img = np.where(img_norm < global_threshold, 1.0, 0.0)
 
         eroded = morphology.erosion(thresh_img, np.ones([3, 3]))
@@ -154,24 +167,49 @@ def generate_lung_mask(volume_3d):
 
         labels = measure.label(eroded_dilation)
         regions = measure.regionprops(labels)
-        good_labels = []
+
+        valid_regions = []
 
         for prop in regions:
-            B = prop.bbox
-            if (
-                (B[2] - B[0] < row_size / 10 * 9)
-                and (B[3] - B[1] < col_size / 10 * 9)
-                and (B[0] > row_size / 5)
-                and (B[2] < col_size / 5 * 4)
-            ):
-                good_labels.append(prop.label)
+            if prop.area < 200:
+                continue
+
+            region_mask = labels == prop.label
+
+            if np.any(region_mask & fov_boundary):
+                continue
+
+            valid_regions.append(prop)
+
+        # On trie par taille et on garde les 2 plus grandes poches internes (les poumons)
+        valid_regions.sort(key=lambda x: x.area, reverse=True)
+        final_labels = [r.label for r in valid_regions[:2]]
 
         slice_mask = np.zeros([row_size, col_size], dtype=np.int8)
-        for N in good_labels:
+        for N in final_labels:
             slice_mask += labels == N
 
+        # Dilatation finale
         final_mask = morphology.dilation(slice_mask, np.ones([8, 8]))
         mask_3d[i] = final_mask
+
+    # On labellise les composantes connexes en 3D
+    labels_3d = measure.label(mask_3d)
+    regions_3d = measure.regionprops(labels_3d)
+
+    if len(regions_3d) > 0:
+        # On trie par volume (aire en 3D)
+        regions_3d.sort(key=lambda x: x.area, reverse=True)
+        max_volume = regions_3d[0].area
+
+        # On garde uniquement les composantes dont le volume représente au moins 5% du volume maximal
+        valid_labels_3d = [r.label for r in regions_3d if r.area > max_volume * 0.05]
+
+        mask_3d_clean = np.zeros_like(mask_3d, dtype=np.int8)
+        for label in valid_labels_3d:
+            mask_3d_clean += labels_3d == label
+
+        mask_3d = mask_3d_clean
 
     return mask_3d.astype(bool)
 
@@ -264,12 +302,18 @@ def process_patient_segmentation(
 
             # 4. Extract Features
             features = extract_radiomics_features(resampled_volume, mask_3d)
+
+            # Abort if metrics are [0, 0, 0, 0]
+            if features == [0.0, 0.0, 0.0, 0.0]:
+                logger.error(
+                    f"Segmentation failed (empty mask) for patient {patient_id}. Metrics are [0, 0, 0, 0]. Aborting."
+                )
+                return None, None
+
             lung_volume = features[0]
             mean_hu = features[1]
             std_hu = features[2]
             fibrosis_ratio = features[3]  # fibrosis ratio
-            # Calculate sickness value as the ratio of optimal FVC to lung volume
-            # > 80% is considered normal, < 80% indicates potential lung disease
 
             sickness_value = fvc_baseline / optimal_fvc if optimal_fvc > 0 else 0.0
 
