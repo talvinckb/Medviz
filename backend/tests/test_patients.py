@@ -522,3 +522,4 @@ def test_background_segmentation_pipeline(client, db_connection, mocker):
     assert patient_data["sickness_value"] is not None
     assert patient_data["mean_hu"] is not None
     assert patient_data["std_hu"] is not None
+    assert len(patient_data["fvc_records"]) > 0

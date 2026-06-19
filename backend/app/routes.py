@@ -35,6 +35,7 @@ def add_patient(
     name: str = Form(..., description="Nom patient"),
     age: int = Form(..., description="Âge du patient"),
     gender: str = Form(..., description="Sexe du patient"),
+    smoking_status: str = Form("Never smoked", description="Statut fumeur du patient"),
     height: float = Form(..., description="Taille du patient en cm"),
     fvc_baseline: float = Form(..., description="FVC baseline du patient en mL"),
     file: Optional[UploadFile] = File(
@@ -49,7 +50,7 @@ def add_patient(
     Add a new patient with their zip DICOM file or multiple DICOM files
     """
     logger.info(
-        f"Upload request received for patient: name={name}, age={age}, gender={gender}"
+        f"Upload request received for patient: name={name}, age={age}, gender={gender}, smoking_status={smoking_status}"
     )
 
     if not file and not files:
@@ -71,8 +72,16 @@ def add_patient(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Age ou sexe invalide"
         )
 
+    if smoking_status not in ["Never smoked", "Ex-smoker", "Currently smokes"]:
+        logger.warning(f"Invalid smoking status for patient: {smoking_status}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Statut fumeur invalide"
+        )
+
     try:
-        new_patient = db_add_patient(db, name, age, gender, file, files)
+        new_patient = db_add_patient(
+            db, name, age, gender, smoking_status, height, fvc_baseline, file, files
+        )
         logger.info(
             f"Patient created successfully: id={new_patient['id']}, zip_path={new_patient['zip_path']}"
         )
@@ -83,6 +92,7 @@ def add_patient(
             new_patient["zip_path"],
             age,
             gender,
+            smoking_status,
             height,
             fvc_baseline,
         )

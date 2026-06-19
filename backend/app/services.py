@@ -12,7 +12,7 @@ from fastapi import UploadFile
 def db_get_patient(conn: sqlite3.Connection, patient_id: int) -> Optional[dict]:
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, name, age, gender, lung_volume, optimal_fvc, mean_hu, std_hu, sickness_value, fibrosis_ratio, zip_path, glb_path FROM patient WHERE id = ?",
+        "SELECT id, name, age, gender, smoking_status, height, fvc_baseline, lung_volume, optimal_fvc, mean_hu, std_hu, sickness_value, fibrosis_ratio, zip_path, glb_path FROM patient WHERE id = ?",
         (patient_id,),
     )
     row = cursor.fetchone()
@@ -39,20 +39,25 @@ def db_add_patient(
     name: str,
     age: int,
     gender: str,
+    smoking_status: str,
+    height: float,
+    fvc_baseline: float,
     file: Optional[UploadFile],
     files: Optional[List[UploadFile]] = None,
 ) -> dict:
     """
     Add a patient in DB, save the ZIP file on disk and store the path in DB
     """
-    logger.info(f"Adding new patient: name={name}, age={age}, gender={gender}")
+    logger.info(
+        f"Adding new patient: name={name}, age={age}, gender={gender}, smoking_status={smoking_status}"
+    )
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO patient (name, age, gender, lung_volume, optimal_fvc, mean_hu, std_hu, sickness_value, fibrosis_ratio, zip_path, glb_path)
-        VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, NULL)
+        INSERT INTO patient (name, age, gender, smoking_status, height, fvc_baseline, lung_volume, optimal_fvc, mean_hu, std_hu, sickness_value, fibrosis_ratio, zip_path, glb_path)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, NULL)
         """,
-        (name, age, gender, ""),
+        (name, age, gender, smoking_status, height, fvc_baseline, ""),
     )
     conn.commit()
     patient_id = cursor.lastrowid  # to name the file with the patient ID
@@ -92,6 +97,9 @@ def db_add_patient(
         "name": name,
         "age": age,
         "gender": gender,
+        "smoking_status": smoking_status,
+        "height": height,
+        "fvc_baseline": fvc_baseline,
         "lung_volume": None,
         "optimal_fvc": None,
         "sickness_value": None,
@@ -179,3 +187,28 @@ def db_update_patient_features(
     )
     conn.commit()
     logger.info(f"Features updated for patient {patient_id}")
+
+
+def db_add_fvc_records(
+    conn: sqlite3.Connection, patient_id: int, records: List[dict]
+) -> None:
+    """
+    Inserts a list of FVC predictions for a patient
+    """
+    logger.info(
+        f"Adding {len(records)} FVC prediction records for patient {patient_id}"
+    )
+    cursor = conn.cursor()
+    # First, clear any existing records for this patient
+    cursor.execute("DELETE FROM fvc WHERE patient_id = ?", (patient_id,))
+
+    # Bulk insert
+    cursor.executemany(
+        """
+        INSERT INTO fvc (patient_id, fvc, week_num, confidence)
+        VALUES (?, ?, ?, ?)
+        """,
+        [(patient_id, r["fvc"], r["week_num"], r["confidence"]) for r in records],
+    )
+    conn.commit()
+    logger.info(f"FVC prediction records added successfully for patient {patient_id}")

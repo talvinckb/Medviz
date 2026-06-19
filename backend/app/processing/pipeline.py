@@ -3,12 +3,14 @@ import tempfile
 import zipfile
 
 import numpy as np
+import pandas as pd
 import pydicom
 import scipy
 import trimesh
+import xgboost as xgb
 from app.database import UPLOAD_DIR, get_db_connection
 from app.logger import logger
-from app.services import db_update_patient_features
+from app.services import db_add_fvc_records, db_update_patient_features
 from skimage import measure, morphology
 from sklearn.cluster import KMeans
 from spiref import gli12
@@ -265,6 +267,7 @@ def process_patient_segmentation(
     zip_path: str,
     age: int,
     sex: str,
+    smoking_status: str,
     height: float,
     fvc_baseline: float,
 ):
@@ -328,7 +331,7 @@ def process_patient_segmentation(
                 glb_path = None
                 logger.warning(f"Failed to generate 3D model for patient {patient_id}")
 
-            # 6. Update Database
+            # 6. Update Database & Run FVC Predictions
             conn = get_db_connection()
             try:
                 db_update_patient_features(
@@ -343,6 +346,90 @@ def process_patient_segmentation(
                     glb_path,
                 )
                 logger.info(f"Updated database with features for patient {patient_id}")
+
+                # ML FVC Prediction
+                model_dir = os.path.dirname(os.path.abspath(__file__))
+                model_path = os.path.join(model_dir, "..", "models", "model_fvc.json")
+                if os.path.exists(model_path):
+                    logger.info(f"Loading FVC prediction model from {model_path}")
+                    model_fvc = xgb.XGBRegressor()
+                    model_fvc.load_model(model_path)
+
+                    sex_male = 1 if sex == "M" else 0
+                    smoking_ex_smoker = 1 if smoking_status == "Ex-smoker" else 0
+                    smoking_never_smoked = 1 if smoking_status == "Never smoked" else 0
+
+                    base_week = 0
+                    base_percent = (
+                        (fvc_baseline / optimal_fvc) * 100.0 if optimal_fvc > 0 else 0.0
+                    )
+
+                    prediction_rows = []
+                    weeks = list(range(-12, 134))
+                    for w in weeks:
+                        weeks_delta = w - base_week
+                        row = {
+                            "Weeks": w,
+                            "Age": age,
+                            "Vol_Lung_cm3": lung_volume,
+                            "Mean_HU": mean_hu,
+                            "Std_HU": std_hu,
+                            "Fibrosis_Ratio": fibrosis_ratio,
+                            "Sex_Male": sex_male,
+                            "SmokingStatus_Ex-smoker": smoking_ex_smoker,
+                            "SmokingStatus_Never smoked": smoking_never_smoked,
+                            "Base_Week": base_week,
+                            "Base_FVC": fvc_baseline,
+                            "Base_Percent": base_percent,
+                            "Weeks_Delta": weeks_delta,
+                        }
+                        prediction_rows.append(row)
+
+                    feature_cols = [
+                        "Weeks",
+                        "Age",
+                        "Vol_Lung_cm3",
+                        "Mean_HU",
+                        "Std_HU",
+                        "Fibrosis_Ratio",
+                        "Sex_Male",
+                        "SmokingStatus_Ex-smoker",
+                        "SmokingStatus_Never smoked",
+                        "Base_Week",
+                        "Base_FVC",
+                        "Base_Percent",
+                        "Weeks_Delta",
+                    ]
+                    df_pred = pd.DataFrame(prediction_rows, columns=feature_cols)
+                    preds_fvc = model_fvc.predict(df_pred)
+
+                    fvc_records = []
+                    for i, w in enumerate(weeks):
+                        pred_ml = float(preds_fvc[i])
+                        pred_liters = pred_ml / 1000.0
+
+                        weeks_delta = w - base_week
+                        sigma = 70 + 0.8 * abs(weeks_delta)
+                        confidence = max(0.1, 1.0 - (sigma - 70) / 300.0)
+
+                        fvc_records.append(
+                            {
+                                "week_num": w,
+                                "fvc": pred_liters,
+                                "confidence": confidence,
+                            }
+                        )
+
+                    db_add_fvc_records(conn, patient_id, fvc_records)
+                    logger.info(
+                        f"FVC prediction records successfully saved for patient {patient_id}"
+                    )
+                else:
+                    logger.error(f"FVC prediction model file not found at {model_path}")
+            except Exception as e:
+                logger.error(
+                    f"Error running ML FVC prediction: {str(e)}", exc_info=True
+                )
             finally:
                 conn.close()
 
