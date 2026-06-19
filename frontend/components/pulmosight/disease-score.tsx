@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -9,24 +9,68 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Info } from "lucide-react";
+import { FVCRecord } from "@/types/types";
+import { Slider } from "@/components/ui/slider";
 
 interface DiseaseScoreProps {
   sickness_value: number;
   fibrosis_ratio: number;
+  fvc_baseline: number;
+  optimal_fvc: number;
+  fvc_records?: FVCRecord[];
 }
 
 export function DiseaseScore({
   sickness_value,
   fibrosis_ratio,
+  fvc_baseline,
+  optimal_fvc,
+  fvc_records = [],
 }: DiseaseScoreProps) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
 
-  console.log("DiseaseScore sickness_value:", sickness_value);
+  // Set week range from 0 to 52 weeks
+  const minWeek = 0;
+  const maxWeek = 52;
 
-  // Sickness value is fvc_baseline / optimal_fvc
-  // When sickness_value is around 0.8, the score should be 2.
+  // Default to week 0 if available, else first available week, else 0
+  const defaultWeek = fvc_records.some((r) => r.week_num === 0)
+    ? 0
+    : fvc_records.length > 0
+      ? Math.max(0, Math.min(52, fvc_records[0].week_num))
+      : 0;
+
+  const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
+
+  // Sync selectedWeek if patient / fvc_records changes
+  useEffect(() => {
+    const newDefaultWeek = fvc_records.some((r) => r.week_num === 0)
+      ? 0
+      : fvc_records.length > 0
+        ? Math.max(0, Math.min(52, fvc_records[0].week_num))
+        : 0;
+    setSelectedWeek(newDefaultWeek);
+  }, [fvc_records]);
+
+  // Find active record or use baseline FVC if not found
+  const activeRecord = fvc_records.find((r) => r.week_num === selectedWeek);
+  const selectedFVC = activeRecord ? activeRecord.fvc : fvc_baseline || 0;
+
+  // Sickness value is selectedFVC / optimal_fvc (optimal_fvc is in mL, selectedFVC is in liters)
+  const dynamicSicknessValue =
+    optimal_fvc > 0 ? selectedFVC / (optimal_fvc / 1000.0) : sickness_value;
+
+  console.log(
+    "DiseaseScore selectedWeek:",
+    selectedWeek,
+    "selectedFVC:",
+    selectedFVC,
+    "sickness_value:",
+    dynamicSicknessValue,
+  );
+
   // Formula: score = (1 - sickness_value) * 10. Max score is 4.
-  const score = Math.max(0, Math.min(4, (1 - sickness_value) * 10));
+  const score = Math.max(0, Math.min(4, (1 - dynamicSicknessValue) * 10));
 
   const getStageLabel = (score: number) => {
     if (score < 1.5) return "Pas malade";
@@ -36,10 +80,10 @@ export function DiseaseScore({
   };
 
   const getScoreColor = (score: number) => {
-    if (score < 1.5) return "text-[#4CAF50]"; // specific green from screenshot
-    if (score < 2.5) return "text-[#4CAF50]";
-    if (score < 3.5) return "text-orange-500";
-    return "text-red-500";
+    if (score < 1.5) return "text-[#4CAF50]"; // Green
+    if (score < 2.5) return "text-[#FFB300]"; // Amber/Yellow
+    if (score < 3.5) return "text-[#FF9800]"; // Orange
+    return "text-[#F44336]"; // Red
   };
 
   // Calculate pin position (0-4 scale, percentage)
@@ -61,7 +105,7 @@ export function DiseaseScore({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col flex-1 items-center justify-center gap-6 pb-8 pt-4 mx-6">
-        <div className="text-center">
+        <div className="text-center w-full">
           <p
             className={`text-[64px] leading-none font-bold tracking-tight ${getScoreColor(score)}`}
           >
@@ -73,9 +117,27 @@ export function DiseaseScore({
           <p className="mt-2 text-[13px] text-gray-500 font-medium">
             Ratio de fibrose: {(fibrosis_ratio * 100).toFixed(1)}%
           </p>
+
+          <div className="mt-4 flex gap-4 justify-center text-[13px] border-t border-gray-100 pt-3">
+            <div>
+              <span className="text-gray-400">
+                FVC Semaine {selectedWeek} :{" "}
+              </span>
+              <span className="font-semibold text-gray-700">
+                {selectedFVC ? `${selectedFVC.toFixed(2)} L` : "N/A"}
+              </span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 align-middle self-center" />
+            <div>
+              <span className="text-gray-400">FVC Optimale : </span>
+              <span className="font-semibold text-gray-700">
+                {optimal_fvc ? `${(optimal_fvc / 1000).toFixed(2)} L` : "N/A"}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="w-full mt-4 relative">
+        <div className="w-full mt-2 relative">
           <div className=" mb-1 h-8">
             <div
               className="absolute -translate-x-1/2 flex flex-col items-center translate-y-1/2"
@@ -110,6 +172,38 @@ export function DiseaseScore({
             </div>
           </div>
         </div>
+
+        {/* Week Selector Slider */}
+        {fvc_records.length > 0 && (
+          <div className="w-full mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
+            <div className="flex justify-between items-center text-xs font-semibold text-gray-500">
+              <span>Comparer avec la semaine :</span>
+              <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">
+                Semaine {selectedWeek}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-xs text-gray-400 w-12 text-right">
+                Sem. {minWeek}
+              </span>
+              <Slider
+                value={[selectedWeek]}
+                onValueChange={(values) => {
+                  if (values && values.length > 0) {
+                    setSelectedWeek(values[0]);
+                  }
+                }}
+                min={minWeek}
+                max={maxWeek}
+                step={1}
+                className="flex-1 cursor-pointer"
+              />
+              <span className="text-xs text-gray-400 w-12 text-left">
+                Sem. {maxWeek}
+              </span>
+            </div>
+          </div>
+        )}
       </CardContent>
 
       <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
@@ -129,7 +223,19 @@ export function DiseaseScore({
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700">
                 <li>
-                  <strong>Ratio observé :</strong> {sickness_value.toFixed(3)}
+                  <strong>Semaine comparée :</strong> Semaine {selectedWeek}
+                </li>
+                <li>
+                  <strong>FVC Semaine {selectedWeek} :</strong>{" "}
+                  {selectedFVC ? `${selectedFVC.toFixed(2)} L` : "N/A"}
+                </li>
+                <li>
+                  <strong>FVC Optimale (fixe) :</strong>{" "}
+                  {optimal_fvc ? `${(optimal_fvc / 1000).toFixed(2)} L` : "N/A"}
+                </li>
+                <li>
+                  <strong>Ratio observé :</strong>{" "}
+                  {dynamicSicknessValue.toFixed(3)}
                 </li>
                 <li>
                   <strong>Formule :</strong>{" "}

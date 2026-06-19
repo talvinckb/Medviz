@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Info } from "lucide-react";
 import {
   LineChart,
@@ -35,6 +36,7 @@ interface FVCPredictionProps {
 
 export function FVCPrediction({ data, fvc_optimal }: FVCPredictionProps) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [period, setPeriod] = useState<"3" | "6" | "12" | "all">("12");
 
   // Mocked data for demonstration purposes
   const nbWeeks = 12;
@@ -55,30 +57,72 @@ export function FVCPrediction({ data, fvc_optimal }: FVCPredictionProps) {
   const allowMockedData = false; // Set to true to allow mocked data when real data is not available
 
   const rawData = data.length > 0 || !allowMockedData ? data : mockedData;
-  const chartData = rawData.map((d) => ({
+
+  // Filter FVC predictions based on the selected period in months (weeks equivalent)
+  const filteredData = rawData.filter((d) => {
+    if (d.week < 0) return false;
+    if (period === "3") return d.week <= 12;
+    if (period === "6") return d.week <= 26;
+    if (period === "12") return d.week <= 52;
+    return true; // all
+  });
+
+  const chartData = filteredData.map((d) => ({
     ...d,
     range: [d.lower, d.upper],
   }));
 
   const criticalThreshold = (fvc_optimal * 0.8) / 1000; // 80% of optimal FVC in liters
 
+  const maxVal = Math.max(
+    ...chartData.map((d) => Math.max(d.upper || 0, d.fvc || 0)),
+    4.0,
+  );
+
+  const dataMin =
+    chartData.length > 0
+      ? Math.min(...chartData.map((d) => Math.min(d.lower ?? d.fvc, d.fvc)))
+      : 1.5;
+  const rawMin = Math.min(dataMin, criticalThreshold);
+  const yMin = rawMin < 1.5 ? Math.max(0, Math.floor(rawMin * 10) / 10) : 1.5;
+
+  const yDomain = [yMin, maxVal > 4 ? Math.ceil(maxVal) : 4];
+
   return (
     <Card className="h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
-      <CardHeader className="pb-2 pt-4 px-6">
-        <CardTitle className="flex items-center gap-2 text-[15px] font-semibold text-gray-800">
-          Prédiction de la FVC au cours du temps
-          <button
-            type="button"
-            onClick={() => setIsInfoOpen(true)}
-            className="rounded-full text-gray-400 transition-colors hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer"
-            aria-label="Afficher les informations sur la prédiction de la FVC"
-          >
-            <Info className="h-4 w-4" />
-          </button>
-        </CardTitle>
-        <div className="text-[13px] font-medium text-gray-600 mt-4">
-          FVC (L)
+      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-6 gap-4">
+        <div className="space-y-1">
+          <CardTitle className="flex items-center gap-2 text-[15px] font-semibold text-gray-800">
+            Prédiction de la FVC au cours du temps
+            <button
+              type="button"
+              onClick={() => setIsInfoOpen(true)}
+              className="rounded-full text-gray-400 transition-colors hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer"
+              aria-label="Afficher les informations sur la prédiction de la FVC"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          </CardTitle>
+          <div className="text-[13px] font-medium text-gray-600">FVC (L)</div>
         </div>
+
+        <Tabs
+          value={period}
+          onValueChange={(val) => setPeriod(val as any)}
+          className="w-auto"
+        >
+          <TabsList className="bg-gray-100/80 p-0.5 h-8">
+            <TabsTrigger value="3" className="text-xs px-2.5 h-7">
+              3 mois
+            </TabsTrigger>
+            <TabsTrigger value="6" className="text-xs px-2.5 h-7">
+              6 mois
+            </TabsTrigger>
+            <TabsTrigger value="12" className="text-xs px-2.5 h-7">
+              12 mois
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col p-0 pb-6 min-h-0">
         <div className="flex-1 min-h-0 px-6">
@@ -108,14 +152,11 @@ export function FVCPrediction({ data, fvc_optimal }: FVCPredictionProps) {
                 }}
               />
               <YAxis
-                domain={[0, 4]}
-                ticks={[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]}
+                domain={yDomain}
                 tick={{ fontSize: 12, fill: "#64748b" }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) =>
-                  value % 1 === 0 ? value : value.toFixed(1)
-                }
+                tickFormatter={(value) => value.toFixed(1)}
               />
               <Tooltip content={<CustomTooltip />} />
 

@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/pulmosight/sidebar";
 import { Header } from "@/components/pulmosight/header";
 import { LungVisualization } from "@/components/pulmosight/lung-visualization";
 import { DiseaseScore } from "@/components/pulmosight/disease-score";
-import { LungVolume } from "@/components/pulmosight/lung-volume";
 import { FVCPrediction } from "@/components/pulmosight/fvc-prediction";
 import { DicomModal } from "@/components/pulmosight/dicom-modal";
 import { getPatients, getPatientData, deletePatient } from "@/lib/api";
@@ -107,13 +106,21 @@ export function PulmoSightDashboard() {
 
   const fvcData = useMemo(() => {
     if (!patientData?.fvc_records) return [];
-    return patientData.fvc_records.map((record) => ({
-      week: record.week_num,
-      fvc: record.fvc,
-      upper: record.fvc + 0.3, // Simple interval calculation
-      lower: Math.max(0, record.fvc - 0.3),
-      reliability: record.confidence * 100,
-    }));
+    return patientData.fvc_records.map((record) => {
+      // Reconstruct sigma (standard deviation in mL) from the confidence value
+      // confidence = max(0.1, 1.0 - (sigma - 70) / 300.0)
+      const sigma = 70 + 300 * (1 - record.confidence);
+      const sigmaLiters = sigma / 1000.0;
+      // 95% confidence interval width is approximately 1.96 * sigma
+      const margin = 1.96 * sigmaLiters;
+      return {
+        week: record.week_num,
+        fvc: record.fvc,
+        upper: record.fvc + margin,
+        lower: Math.max(0, record.fvc - margin),
+        reliability: record.confidence * 100,
+      };
+    });
   }, [patientData]);
 
   const isProcessing = patientData && !patientData.glb_path;
@@ -154,6 +161,17 @@ export function PulmoSightDashboard() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header
           patientId={selectedPatientId?.toString() || ""}
+          patientInfo={
+            patientData
+              ? {
+                  name: patientData.name,
+                  age: patientData.age,
+                  gender: patientData.gender,
+                  height: patientData.height,
+                  smoking_status: patientData.smoking_status,
+                }
+              : undefined
+          }
           onDelete={selectedPatientId ? handleDeletePatient : undefined}
         />
 
@@ -197,28 +215,32 @@ export function PulmoSightDashboard() {
               </div>
             </div>
           ) : (
-            <div className="flex h-full flex-col gap-5 lg:flex-row">
-              <div className="flex w-full flex-col gap-5 lg:w-[60%]">
+            <div className="flex flex-col gap-5 h-full">
+              {/* Upper Section: 3D Visualization and Disease Score */}
+              <div className="flex flex-col lg:flex-row gap-5">
                 <div className="flex-1 min-h-100">
-                  <LungVisualization patientId={selectedPatientId} />
+                  <LungVisualization
+                    patientId={selectedPatientId}
+                    lung_volume={volume}
+                  />
                 </div>
-
-                <div className="flex-1 min-h-150">
-                  <FVCPrediction data={fvcData} fvc_optimal={optimalFvc} />
-                </div>
-              </div>
-
-              <div className="flex w-full flex-col gap-5 lg:w-[40%]">
-                <div className="shrink-0">
+                <div className="flex-1 min-h-100">
                   <DiseaseScore
                     sickness_value={diseaseScore}
                     fibrosis_ratio={fibrosisRatio}
+                    fvc_baseline={
+                      patientData?.fvc_records.find((r) => r.week_num === 0)
+                        ?.fvc || 0
+                    }
+                    optimal_fvc={optimalFvc}
+                    fvc_records={patientData?.fvc_records || []}
                   />
                 </div>
+              </div>
 
-                <div className="shrink-0">
-                  <LungVolume volume={volume} optimalFvc={optimalFvc} />
-                </div>
+              {/* Lower Section: Full-width FVC Prediction */}
+              <div className="w-full min-h-120">
+                <FVCPrediction data={fvcData} fvc_optimal={optimalFvc} />
               </div>
             </div>
           )}
