@@ -52,7 +52,7 @@ export function FVCPrediction({ data, fvc_optimal }: FVCPredictionProps) {
     };
   });
 
-  const allowMockedData = true; // Set to true to allow mocked data when real data is not available
+  const allowMockedData = false; // Set to true to allow mocked data when real data is not available
 
   const rawData = data.length > 0 || !allowMockedData ? data : mockedData;
   const chartData = rawData.map((d) => ({

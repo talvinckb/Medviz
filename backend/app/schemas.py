@@ -22,6 +22,9 @@ class PatientDetail(BaseModel):
     name: str = Field(..., description="Nom du patient")
     age: int = Field(..., description="Âge du patient")
     gender: str = Field(..., description="Sexe du patient")
+    smoking_status: Optional[str] = Field(None, description="Statut fumeur du patient")
+    height: Optional[float] = Field(None, description="Taille du patient (en cm)")
+    fvc_baseline: Optional[float] = Field(None, description="FVC baseline (en mL)")
     lung_volume: Optional[float] = Field(
         None,
         description="Volume du poumon (en mL)",  ##TODO: remove None

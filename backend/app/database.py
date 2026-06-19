@@ -46,6 +46,19 @@ def init_db():
             );
         """)
 
+        # Add missing columns dynamically if they do not exist
+        cursor.execute("PRAGMA table_info(patient);")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "smoking_status" not in columns:
+            cursor.execute("ALTER TABLE patient ADD COLUMN smoking_status TEXT;")
+            logger.info("Added smoking_status column to patient table")
+        if "height" not in columns:
+            cursor.execute("ALTER TABLE patient ADD COLUMN height REAL;")
+            logger.info("Added height column to patient table")
+        if "fvc_baseline" not in columns:
+            cursor.execute("ALTER TABLE patient ADD COLUMN fvc_baseline REAL;")
+            logger.info("Added fvc_baseline column to patient table")
+
         conn.commit()
         logger.info("Database tables initialized")
     except Exception as e:
