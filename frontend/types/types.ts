@@ -24,6 +24,8 @@ export interface PatientDetail {
   zip_path: string;
   glb_path: string | null;
   fvc_records: FVCRecord[];
+  smoking_status?: string | null;
+  fvc_baseline?: number | null;
 }
 
 export interface Lung3D {}
