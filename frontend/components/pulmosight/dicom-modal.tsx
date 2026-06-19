@@ -273,20 +273,37 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Statut fumeur
-                </label>
-                <select
-                  required
-                  name="smoking_status"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">Sélectionner...</option>
-                  <option value="Never smoked">Jamais fumé</option>
-                  <option value="Ex-smoker">Ancien fumeur</option>
-                  <option value="Currently smokes">Fumeur actuel</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Statut fumeur
+                  </label>
+                  <select
+                    required
+                    name="smoking_status"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Sélectionner...</option>
+                    <option value="Never smoked">Jamais fumé</option>
+                    <option value="Ex-smoker">Ancien fumeur</option>
+                    <option value="Currently smokes">Fumeur actuel</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Taille (cm)
+                  </label>
+                  <input
+                    required
+                    name="height"
+                    type="number"
+                    step="1"
+                    min="50"
+                    max="300"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="ex: 175"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -303,7 +320,7 @@ export function DicomModal({ open, onOpenChange, onSuccess }: DicomModalProps) {
                 </label>
                 <input
                   required
-                  name="first_fvc"
+                  name="fvc_baseline"
                   type="number"
                   step="0.01"
                   min="0"

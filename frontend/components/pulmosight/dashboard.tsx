@@ -102,6 +102,8 @@ export function PulmoSightDashboard() {
   const volume = patientData?.lung_volume || 0;
   const percentage = 100; // TODO: Calculate percentage on real data
   const diseaseScore = patientData?.sickness_value || 0;
+  const fibrosisRatio = patientData?.fibrosis_ratio || 0;
+  const optimalFvc = patientData?.optimal_fvc || 0;
 
   const fvcData = useMemo(() => {
     if (!patientData?.fvc_records) return [];
@@ -201,18 +203,21 @@ export function PulmoSightDashboard() {
                   <LungVisualization patientId={selectedPatientId} />
                 </div>
 
-                <div className="flex-1 min-h-75">
-                  <FVCPrediction data={fvcData} />
+                <div className="flex-1 min-h-150">
+                  <FVCPrediction data={fvcData} fvc_optimal={optimalFvc} />
                 </div>
               </div>
 
               <div className="flex w-full flex-col gap-5 lg:w-[40%]">
                 <div className="shrink-0">
-                  <DiseaseScore score={diseaseScore} />
+                  <DiseaseScore
+                    sickness_value={diseaseScore}
+                    fibrosis_ratio={fibrosisRatio}
+                  />
                 </div>
 
                 <div className="shrink-0">
-                  <LungVolume volume={volume} percentage={percentage} />
+                  <LungVolume volume={volume} optimalFvc={optimalFvc} />
                 </div>
               </div>
             </div>

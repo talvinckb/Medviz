@@ -24,13 +24,21 @@ class PatientDetail(BaseModel):
     gender: str = Field(..., description="Sexe du patient")
     lung_volume: Optional[float] = Field(
         None,
-        description="Volume du poumon (en litres)",  ##TODO: remove None
+        description="Volume du poumon (en mL)",  ##TODO: remove None
+    )
+    optimal_fvc: Optional[float] = Field(
+        None,
+        description="FVC optimale (en mL)",  ##TODO: remove None
     )
     mean_hu: Optional[float] = Field(None, description="Moyenne HU")
     std_hu: Optional[float] = Field(None, description="Ecart type HU")
     sickness_value: Optional[float] = Field(
         None,
         description="Indice de gravité",  ##TODO: remove None
+    )
+    fibrosis_ratio: Optional[float] = Field(
+        None,
+        description="Ratio de fibrose",  ##TODO: remove None
     )
     zip_path: str = Field(..., description="Path au DICOM (zip)")
     glb_path: Optional[str] = Field(None, description="Path au fichier 3D (glb)")

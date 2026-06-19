@@ -35,6 +35,8 @@ def add_patient(
     name: str = Form(..., description="Nom patient"),
     age: int = Form(..., description="Âge du patient"),
     gender: str = Form(..., description="Sexe du patient"),
+    height: float = Form(..., description="Taille du patient en cm"),
+    fvc_baseline: float = Form(..., description="FVC baseline du patient en mL"),
     file: Optional[UploadFile] = File(
         None, description="ZIP contenant les fichiers DICOM"
     ),
@@ -76,7 +78,13 @@ def add_patient(
         )
 
         background_tasks.add_task(
-            process_patient_segmentation, new_patient["id"], new_patient["zip_path"]
+            process_patient_segmentation,
+            new_patient["id"],
+            new_patient["zip_path"],
+            age,
+            gender,
+            height,
+            fvc_baseline,
         )
         logger.info(f"Background task started for patient {new_patient['id']}")
 

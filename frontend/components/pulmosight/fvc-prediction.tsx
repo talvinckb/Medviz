@@ -30,10 +30,37 @@ interface FVCPredictionProps {
     lower: number;
     reliability: number;
   }[];
+  fvc_optimal: number;
 }
 
-export function FVCPrediction({ data }: FVCPredictionProps) {
+export function FVCPrediction({ data, fvc_optimal }: FVCPredictionProps) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+
+  // Mocked data for demonstration purposes
+  const nbWeeks = 12;
+  const mockedData = Array.from({ length: nbWeeks }, (_, i) => {
+    // Generate a realistic curve starting around 2.5 and declining slightly
+    const fvc = 2.5 - i * 0.12 + Math.sin(i * 1.5) * 0.25;
+    const lower = Math.max(0, fvc - 0.35);
+    const upper = fvc + 0.35;
+    return {
+      week: i + 1,
+      fvc,
+      upper,
+      lower,
+      reliability: Math.max(10, 100 - i * 6 - Math.random() * 10),
+    };
+  });
+
+  const allowMockedData = true; // Set to true to allow mocked data when real data is not available
+
+  const rawData = data.length > 0 || !allowMockedData ? data : mockedData;
+  const chartData = rawData.map((d) => ({
+    ...d,
+    range: [d.lower, d.upper],
+  }));
+
+  const criticalThreshold = (fvc_optimal * 0.8) / 1000; // 80% of optimal FVC in liters
 
   return (
     <Card className="h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
@@ -53,11 +80,11 @@ export function FVCPrediction({ data }: FVCPredictionProps) {
           FVC (L)
         </div>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-0 pb-6">
-        <div className="flex-1 min-h-62.5 px-6">
+      <CardContent className="flex-1 flex flex-col p-0 pb-6 min-h-0">
+        <div className="flex-1 min-h-0 px-6">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
-              data={data}
+              data={chartData}
               margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
             >
               <CartesianGrid
@@ -94,21 +121,14 @@ export function FVCPrediction({ data }: FVCPredictionProps) {
 
               <Area
                 type="monotone"
-                dataKey="upper"
+                dataKey="range"
                 stroke="none"
                 fill="#3b82f6"
                 fillOpacity={0.08}
               />
-              <Area
-                type="monotone"
-                dataKey="lower"
-                stroke="none"
-                fill="#ffffff"
-                fillOpacity={1}
-              />
 
               <ReferenceLine
-                y={2}
+                y={criticalThreshold}
                 stroke="#ef4444"
                 strokeDasharray="4 4"
                 strokeWidth={1.5}

@@ -25,9 +25,11 @@ def init_db():
                 age INTEGER NOT NULL,
                 gender TEXT NOT NULL,
                 lung_volume REAL,
+                optimal_fvc REAL,
                 mean_hu REAL,
                 std_hu REAL,
                 sickness_value REAL,
+                fibrosis_ratio REAL,
                 zip_path TEXT NOT NULL,
                 glb_path TEXT
             );
