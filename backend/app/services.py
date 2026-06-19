@@ -12,7 +12,7 @@ from fastapi import UploadFile
 def db_get_patient(conn: sqlite3.Connection, patient_id: int) -> Optional[dict]:
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, name, age, gender, lung_volume, mean_hu, std_hu, sickness_value, zip_path, glb_path FROM patient WHERE id = ?",
+        "SELECT id, name, age, gender, lung_volume, optimal_fvc, mean_hu, std_hu, sickness_value, fibrosis_ratio, zip_path, glb_path FROM patient WHERE id = ?",
         (patient_id,),
     )
     row = cursor.fetchone()
@@ -49,8 +49,8 @@ def db_add_patient(
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO patient (name, age, gender, lung_volume, mean_hu, std_hu, sickness_value, zip_path, glb_path)
-        VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL)
+        INSERT INTO patient (name, age, gender, lung_volume, optimal_fvc, mean_hu, std_hu, sickness_value, fibrosis_ratio, zip_path, glb_path)
+        VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, NULL)
         """,
         (name, age, gender, ""),
     )
@@ -93,12 +93,14 @@ def db_add_patient(
         "age": age,
         "gender": gender,
         "lung_volume": None,
+        "optimal_fvc": None,
         "sickness_value": None,
         "mean_hu": None,
         "std_hu": None,
         "zip_path": zip_path,
         "glb_path": None,
         "fvc_records": [],
+        "fibrosis_ratio": None,
     }
     logger.info(f"Patient {patient_id} added to database")
     return new_patient
@@ -147,9 +149,11 @@ def db_update_patient_features(
     conn: sqlite3.Connection,
     patient_id: int,
     lung_volume: float,
+    optimal_fvc: float,
     mean_hu: float,
     std_hu: float,
     sickness_value: float,
+    fibrosis_ratio: float,
     glb_path: Optional[str] = None,
 ) -> None:
     """
@@ -157,12 +161,21 @@ def db_update_patient_features(
     """
     logger.info(
         f"Updating features for patient {patient_id}: lung_volume={lung_volume}, "
-        f"mean_hu={mean_hu}, std_hu={std_hu}, sickness_value={sickness_value}"
+        f"optimal_fvc={optimal_fvc}, mean_hu={mean_hu}, std_hu={std_hu}, sickness_value={sickness_value}, fibrosis_ratio={fibrosis_ratio}"
     )
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE patient SET lung_volume = ?, mean_hu = ?, std_hu = ?, sickness_value = ?, glb_path = ? WHERE id = ?",
-        (lung_volume, mean_hu, std_hu, sickness_value, glb_path, patient_id),
+        "UPDATE patient SET lung_volume = ?, optimal_fvc = ?, mean_hu = ?, std_hu = ?, sickness_value = ?, fibrosis_ratio = ?, glb_path = ? WHERE id = ?",
+        (
+            lung_volume,
+            optimal_fvc,
+            mean_hu,
+            std_hu,
+            sickness_value,
+            fibrosis_ratio,
+            glb_path,
+            patient_id,
+        ),
     )
     conn.commit()
     logger.info(f"Features updated for patient {patient_id}")

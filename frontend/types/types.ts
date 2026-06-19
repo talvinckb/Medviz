@@ -14,10 +14,13 @@ export interface PatientDetail {
   name: string;
   age: number;
   gender: string;
+  height: number;
+  optimal_fvc: number | null;
   lung_volume: number | null;
   mean_hu: number | null;
   std_hu: number | null;
   sickness_value: number | null;
+  fibrosis_ratio: number | null;
   zip_path: string;
   glb_path: string | null;
   fvc_records: FVCRecord[];

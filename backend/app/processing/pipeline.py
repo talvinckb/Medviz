@@ -11,6 +11,23 @@ from app.logger import logger
 from app.services import db_update_patient_features
 from skimage import measure, morphology
 from sklearn.cluster import KMeans
+from spiref import gli12
+
+
+def calculate_optimal_FVC(age, sex, height):
+    """
+    Calculates the optimal Forced Vital Capacity (FVC) in milliliters based on age, sex, and height using the GLI-2012 reference values.
+    Arguments:
+        age (int): Age of the patient in years.
+        height (float): Height of the patient in centimeters.
+        sex (str): Sex of the patient, either 'male' or 'female'.
+    """
+
+    gender = "male" if sex == "M" else "female"
+
+    rvc = gli12.GLIReferenceValueCalculator()
+    optimal_fvc = rvc.calculate_fvc(gender, height, age, race="Cau")
+    return optimal_fvc * 1000  # Convert from liters to milliliters
 
 
 def load_and_sort_scan(patient_id, base_dir):
@@ -205,7 +222,14 @@ def create_3d_file(mask_3d, output_path="lungs.glb", step_size=2):
     return True
 
 
-def process_patient_segmentation(patient_id: int, zip_path: str):
+def process_patient_segmentation(
+    patient_id: int,
+    zip_path: str,
+    age: int,
+    sex: str,
+    height: float,
+    fvc_baseline: float,
+):
     """
     Main function to run the segmentation pipeline for a patient.
     Extracts the zip to a temporary folder, runs segmentation, and returns the volume and mask.
@@ -232,34 +256,46 @@ def process_patient_segmentation(patient_id: int, zip_path: str):
             resampled_volume = resample_volume(hu_volume, slices)
             mask_3d = generate_lung_mask(resampled_volume)
 
-            # 3. Extract Features
+            # 3. Calculate Optimal FVC
+            optimal_fvc = calculate_optimal_FVC(age, sex, height)
+            logger.info(
+                f"Calculated optimal FVC for patient {patient_id}: {optimal_fvc} liters"
+            )
+
+            # 4. Extract Features
             features = extract_radiomics_features(resampled_volume, mask_3d)
             lung_volume = features[0]
             mean_hu = features[1]
             std_hu = features[2]
-            sickness_value = features[3]  # fibrosis ratio
+            fibrosis_ratio = features[3]  # fibrosis ratio
+            # Calculate sickness value as the ratio of optimal FVC to lung volume
+            # > 80% is considered normal, < 80% indicates potential lung disease
+
+            sickness_value = fvc_baseline / optimal_fvc if optimal_fvc > 0 else 0.0
 
             logger.info(
                 f"Segmentation complete for patient {patient_id}. "
-                f"Lung Volume: {lung_volume} cm3, Fibrosis Ratio: {sickness_value}"
+                f"Lung Volume: {lung_volume} cm3, Fibrosis Ratio: {fibrosis_ratio}, Sickness Value: {sickness_value}"
             )
 
-            # 4. Generate 3D Model
+            # 5. Generate 3D Model
             glb_path = f"{UPLOAD_DIR}/{patient_id}/lung.glb"
             if not create_3d_file(mask_3d, glb_path):
                 glb_path = None
                 logger.warning(f"Failed to generate 3D model for patient {patient_id}")
 
-            # 5. Update Database
+            # 6. Update Database
             conn = get_db_connection()
             try:
                 db_update_patient_features(
                     conn,
                     patient_id,
                     lung_volume,
+                    optimal_fvc,
                     mean_hu,
                     std_hu,
                     sickness_value,
+                    fibrosis_ratio,
                     glb_path,
                 )
                 logger.info(f"Updated database with features for patient {patient_id}")

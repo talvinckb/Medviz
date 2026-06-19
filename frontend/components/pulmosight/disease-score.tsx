@@ -11,17 +11,28 @@ import {
 import { Info } from "lucide-react";
 
 interface DiseaseScoreProps {
-  score: number;
+  sickness_value: number;
+  fibrosis_ratio: number;
 }
 
-export function DiseaseScore({ score }: DiseaseScoreProps) {
+export function DiseaseScore({
+  sickness_value,
+  fibrosis_ratio,
+}: DiseaseScoreProps) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
 
+  console.log("DiseaseScore sickness_value:", sickness_value);
+
+  // Sickness value is fvc_baseline / optimal_fvc
+  // When sickness_value is around 0.8, the score should be 2.
+  // Formula: score = (1 - sickness_value) * 10. Max score is 4.
+  const score = Math.max(0, Math.min(4, (1 - sickness_value) * 10));
+
   const getStageLabel = (score: number) => {
-    if (score < 1.5) return "Léger";
+    if (score < 1.5) return "Pas malade";
     if (score < 2.5) return "Modéré";
     if (score < 3.5) return "Sévère";
-    return "Très sévère";
+    return "Très sévère 💀";
   };
 
   const getScoreColor = (score: number) => {
@@ -57,7 +68,10 @@ export function DiseaseScore({ score }: DiseaseScoreProps) {
             {score.toFixed(1)}
           </p>
           <p className={`mt-2 text-[15px] font-medium ${getScoreColor(score)}`}>
-            Stade {getStageLabel(score).toLowerCase()}
+            {getStageLabel(score)}
+          </p>
+          <p className="mt-2 text-[13px] text-gray-500 font-medium">
+            Ratio de fibrose: {(fibrosis_ratio * 100).toFixed(1)}%
           </p>
         </div>
 
@@ -109,11 +123,29 @@ export function DiseaseScore({ score }: DiseaseScoreProps) {
               Il sert à donner une estimation visuelle de la sévérité, mais il
               ne remplace pas un avis médical.
             </p>
+            <div className="rounded-md bg-gray-50 p-3 border border-gray-100">
+              <p className="font-semibold text-gray-800 mb-1">
+                Détails du calcul :
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-gray-700">
+                <li>
+                  <strong>Ratio observé :</strong> {sickness_value.toFixed(3)}
+                </li>
+                <li>
+                  <strong>Formule :</strong>{" "}
+                  <code className="bg-gray-200 px-1 py-0.5 rounded text-xs">
+                    (1 - Ratio) × 10
+                  </code>
+                </li>
+              </ul>
+            </div>
             <p>
-              Pour avoir une interprétation fiable de l'état de santé du
-              patient, il faut demander l'avis d'un professionnel de santé. Seul
-              un médecin peut confirmer un résultat et le replacer dans votre
-              contexte clinique.
+              <strong>
+                Pour avoir une interprétation fiable de l'état de santé du
+                patient, il faut demander l'avis d'un professionnel de santé
+              </strong>
+              . Seul un médecin peut confirmer un résultat et le replacer dans
+              votre contexte clinique.
             </p>
           </div>
         </DialogContent>

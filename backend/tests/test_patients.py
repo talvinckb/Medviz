@@ -120,7 +120,13 @@ def test_add_patient_success(client):
     zip_data = create_mock_zip()
     response = client.post(
         "/patients/upload",
-        data={"name": "Alice Liddell", "age": 10, "gender": "F"},
+        data={
+            "name": "Alice Liddell",
+            "age": 10,
+            "gender": "F",
+            "height": 140.0,
+            "fvc_baseline": 3000.0,
+        },
         files={"file": ("alice_dicoms.zip", zip_data, "application/zip")},
     )
 
@@ -146,7 +152,13 @@ def test_add_patient_multiple_files_success(client):
     dcm2 = io.BytesIO(b"faux contenu 2")
     response = client.post(
         "/patients/upload",
-        data={"name": "Multi File", "age": 45, "gender": "M"},
+        data={
+            "name": "Multi File",
+            "age": 45,
+            "gender": "M",
+            "height": 175.0,
+            "fvc_baseline": 4000.0,
+        },
         files=[
             ("files", ("dossier/image1.dcm", dcm1, "application/dicom")),
             ("files", ("dossier/image2.dcm", dcm2, "application/dicom")),
@@ -170,7 +182,13 @@ def test_add_patient_missing_files(client):
     """Vérifie le rejet si aucun fichier n'est fourni."""
     response = client.post(
         "/patients/upload",
-        data={"name": "No File", "age": 45, "gender": "M"},
+        data={
+            "name": "No File",
+            "age": 45,
+            "gender": "M",
+            "height": 175.0,
+            "fvc_baseline": 4000.0,
+        },
     )
     assert response.status_code == 400
     assert (
@@ -183,7 +201,13 @@ def test_add_patient_invalid_extension(client):
     txt_data = io.BytesIO(b"ceci est un simple fichier texte")
     response = client.post(
         "/patients/upload",
-        data={"name": "Bob", "age": 40, "gender": "M"},
+        data={
+            "name": "Bob",
+            "age": 40,
+            "gender": "M",
+            "height": 175.0,
+            "fvc_baseline": 4000.0,
+        },
         files={"file": ("bob_notes.txt", txt_data, "text/plain")},
     )
 
@@ -202,13 +226,25 @@ def test_get_all_patients(client):
     zip_data_1 = create_mock_zip()
     client.post(
         "/patients/upload",
-        data={"name": "Patient Un", "age": 20, "gender": "M"},
+        data={
+            "name": "Patient Un",
+            "age": 20,
+            "gender": "M",
+            "height": 180.0,
+            "fvc_baseline": 4200.0,
+        },
         files={"file": ("p1.zip", zip_data_1, "application/zip")},
     )
     zip_data_2 = create_mock_zip()
     client.post(
         "/patients/upload",
-        data={"name": "Patient Deux", "age": 30, "gender": "F"},
+        data={
+            "name": "Patient Deux",
+            "age": 30,
+            "gender": "F",
+            "height": 165.0,
+            "fvc_baseline": 3200.0,
+        },
         files={"file": ("p2.zip", zip_data_2, "application/zip")},
     )
 
@@ -227,7 +263,13 @@ def test_get_patient_data_success(client, db_connection):
     zip_data = create_mock_zip()
     add_response = client.post(
         "/patients/upload",
-        data={"name": "Charlie Bucket", "age": 12, "gender": "M"},
+        data={
+            "name": "Charlie Bucket",
+            "age": 12,
+            "gender": "M",
+            "height": 145.0,
+            "fvc_baseline": 2500.0,
+        },
         files={"file": ("charlie.zip", zip_data, "application/zip")},
     )
     patient_id = add_response.json()["id"]
@@ -271,7 +313,13 @@ def test_get_patient_slices_success(client):
     zip_data = create_mock_zip()
     add_response = client.post(
         "/patients/upload",
-        data={"name": "Diana Prince", "age": 30, "gender": "F"},
+        data={
+            "name": "Diana Prince",
+            "age": 30,
+            "gender": "F",
+            "height": 170.0,
+            "fvc_baseline": 3500.0,
+        },
         files={"file": ("diana.zip", zip_data, "application/zip")},
     )
     patient_id = add_response.json()["id"]
@@ -299,7 +347,13 @@ def test_get_patient_lung_success(client, db_connection):
     zip_data = create_mock_zip()
     add_response = client.post(
         "/patients/upload",
-        data={"name": "Bruce Wayne", "age": 40, "gender": "M"},
+        data={
+            "name": "Bruce Wayne",
+            "age": 40,
+            "gender": "M",
+            "height": 185.0,
+            "fvc_baseline": 4500.0,
+        },
         files={"file": ("bruce.zip", zip_data, "application/zip")},
     )
     patient_id = add_response.json()["id"]
@@ -330,7 +384,13 @@ def test_get_patient_lung_not_ready(client):
     zip_data = create_mock_zip()
     add_response = client.post(
         "/patients/upload",
-        data={"name": "Clark Kent", "age": 35, "gender": "M"},
+        data={
+            "name": "Clark Kent",
+            "age": 35,
+            "gender": "M",
+            "height": 190.0,
+            "fvc_baseline": 4800.0,
+        },
         files={"file": ("clark.zip", zip_data, "application/zip")},
     )
     patient_id = add_response.json()["id"]
@@ -346,7 +406,13 @@ def test_remove_patient_success(client, db_connection):
     zip_data = create_mock_zip()
     add_response = client.post(
         "/patients/upload",
-        data={"name": "Evan Wright", "age": 28, "gender": "M"},
+        data={
+            "name": "Evan Wright",
+            "age": 28,
+            "gender": "M",
+            "height": 178.0,
+            "fvc_baseline": 4100.0,
+        },
         files={"file": ("evan.zip", zip_data, "application/zip")},
     )
     patient = add_response.json()
@@ -428,7 +494,13 @@ def test_background_segmentation_pipeline(client, db_connection, mocker):
     # 1. Upload the patient
     add_response = client.post(
         "/patients/upload",
-        data={"name": "Frank", "age": 55, "gender": "M"},
+        data={
+            "name": "Frank",
+            "age": 55,
+            "gender": "M",
+            "height": 175.0,
+            "fvc_baseline": 4000.0,
+        },
         files={"file": ("frank.zip", zip_buffer, "application/zip")},
     )
     assert add_response.status_code == 201
