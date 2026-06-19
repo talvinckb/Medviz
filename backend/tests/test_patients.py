@@ -482,6 +482,10 @@ def test_background_segmentation_pipeline(client, db_connection, mocker):
         return MockDicom(float(z_index))
 
     mocker.patch("pydicom.dcmread", side_effect=mock_dcmread)
+    mocker.patch(
+        "app.processing.pipeline.extract_radiomics_features",
+        return_value=[3000.0, -500.0, 200.0, 0.05],
+    )
 
     # Generate a ZIP with 10 mocked slices, distributed in subdirectories to test os.walk
     zip_buffer = io.BytesIO()
