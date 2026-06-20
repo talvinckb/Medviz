@@ -3,8 +3,8 @@ import sqlite3
 
 from app.logger import logger
 
-DB_PATH = "medviz.db"
-UPLOAD_DIR = "patients_data"
+DB_PATH = os.getenv("DB_PATH", "medviz.db")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "patients_data")
 
 
 def init_db():

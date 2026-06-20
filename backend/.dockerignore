@@ -1,0 +1,27 @@
+# Virtual environments
+.venv/
+
+# Notebook (not needed in production)
+notebook/
+
+# Test files
+tests/
+.pytest_cache/
+.coverage
+
+# Cache
+__pycache__/
+.ruff_cache/
+
+# Data & logs
+medviz.db
+medviz.log
+patients_data/
+
+# Models
+*.glb
+*.gltf
+
+# Misc
+*.py[oc]
+.git/
