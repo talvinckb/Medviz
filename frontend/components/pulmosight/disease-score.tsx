@@ -18,6 +18,9 @@ interface DiseaseScoreProps {
   fvc_baseline: number;
   optimal_fvc: number;
   fvc_records?: FVCRecord[];
+  period: "3" | "6" | "12";
+  selectedWeek: number | null;
+  onWeekChange: (week: number) => void;
 }
 
 export function DiseaseScore({
@@ -26,34 +29,39 @@ export function DiseaseScore({
   fvc_baseline,
   optimal_fvc,
   fvc_records = [],
+  period,
+  selectedWeek,
+  onWeekChange,
 }: DiseaseScoreProps) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
 
-  // Set week range from 0 to 52 weeks
+  // Set week range from 0 to maxWeek depending on period
   const minWeek = 0;
-  const maxWeek = 52;
+  const maxWeek = period === "3" ? 12 : period === "6" ? 26 : 52;
 
-  // Default to week 0 if available, else first available week, else 0
-  const defaultWeek = fvc_records.some((r) => r.week_num === 0)
-    ? 0
-    : fvc_records.length > 0
-      ? Math.max(0, Math.min(52, fvc_records[0].week_num))
-      : 0;
-
-  const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
-
-  // Sync selectedWeek if patient / fvc_records changes
+  // Initialize selectedWeek if null
   useEffect(() => {
-    const newDefaultWeek = fvc_records.some((r) => r.week_num === 0)
-      ? 0
-      : fvc_records.length > 0
-        ? Math.max(0, Math.min(52, fvc_records[0].week_num))
-        : 0;
-    setSelectedWeek(newDefaultWeek);
-  }, [fvc_records]);
+    if (selectedWeek === null) {
+      const defaultWeek = fvc_records.some((r) => r.week_num === 0)
+        ? 0
+        : fvc_records.length > 0
+          ? Math.max(0, Math.min(maxWeek, fvc_records[0].week_num))
+          : 0;
+      onWeekChange(defaultWeek);
+    }
+  }, [fvc_records, selectedWeek, onWeekChange, maxWeek]);
+
+  // Clamp selectedWeek if period changes and it's out of bounds
+  useEffect(() => {
+    if (selectedWeek !== null && selectedWeek > maxWeek) {
+      onWeekChange(maxWeek);
+    }
+  }, [maxWeek, selectedWeek, onWeekChange]);
+
+  const currentWeek = selectedWeek !== null ? selectedWeek : 0;
 
   // Find active record or use baseline FVC if not found
-  const activeRecord = fvc_records.find((r) => r.week_num === selectedWeek);
+  const activeRecord = fvc_records.find((r) => r.week_num === currentWeek);
   const selectedFVC = activeRecord ? activeRecord.fvc : fvc_baseline || 0;
 
   // Sickness value is selectedFVC / optimal_fvc (optimal_fvc is in mL, selectedFVC is in liters)
@@ -61,8 +69,8 @@ export function DiseaseScore({
     optimal_fvc > 0 ? selectedFVC / (optimal_fvc / 1000.0) : sickness_value;
 
   console.log(
-    "DiseaseScore selectedWeek:",
-    selectedWeek,
+    "DiseaseScore currentWeek:",
+    currentWeek,
     "selectedFVC:",
     selectedFVC,
     "sickness_value:",
@@ -121,7 +129,7 @@ export function DiseaseScore({
           <div className="mt-4 flex gap-4 justify-center text-[13px] border-t border-gray-100 pt-3">
             <div>
               <span className="text-gray-400">
-                FVC Semaine {selectedWeek} :{" "}
+                FVC Semaine {currentWeek} :{" "}
               </span>
               <span className="font-semibold text-gray-700">
                 {selectedFVC ? `${selectedFVC.toFixed(2)} L` : "N/A"}
@@ -179,7 +187,7 @@ export function DiseaseScore({
             <div className="flex justify-between items-center text-xs font-semibold text-gray-500">
               <span>Comparer avec la semaine :</span>
               <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">
-                Semaine {selectedWeek}
+                Semaine {currentWeek}
               </span>
             </div>
             <div className="flex items-center gap-3 mt-1">
@@ -187,10 +195,10 @@ export function DiseaseScore({
                 Sem. {minWeek}
               </span>
               <Slider
-                value={[selectedWeek]}
+                value={[currentWeek]}
                 onValueChange={(values) => {
                   if (values && values.length > 0) {
-                    setSelectedWeek(values[0]);
+                    onWeekChange(values[0]);
                   }
                 }}
                 min={minWeek}
@@ -223,10 +231,10 @@ export function DiseaseScore({
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700">
                 <li>
-                  <strong>Semaine comparée :</strong> Semaine {selectedWeek}
+                  <strong>Semaine comparée :</strong> Semaine {currentWeek}
                 </li>
                 <li>
-                  <strong>FVC Semaine {selectedWeek} :</strong>{" "}
+                  <strong>FVC Semaine {currentWeek} :</strong>{" "}
                   {selectedFVC ? `${selectedFVC.toFixed(2)} L` : "N/A"}
                 </li>
                 <li>

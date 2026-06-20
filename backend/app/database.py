@@ -42,6 +42,11 @@ def init_db():
                 fvc REAL NOT NULL,
                 week_num INTEGER NOT NULL,
                 confidence REAL NOT NULL,
+                q005 REAL,
+                q020 REAL,
+                q050 REAL,
+                q080 REAL,
+                q095 REAL,
                 FOREIGN KEY (patient_id) REFERENCES patient (id) ON DELETE CASCADE
             );
         """)
@@ -61,6 +66,15 @@ def init_db():
 
         conn.commit()
         logger.info("Database tables initialized")
+
+        # Add quantile columns to fvc table if they don't exist (migration for existing DBs)
+        cursor.execute("PRAGMA table_info(fvc);")
+        fvc_columns = [row[1] for row in cursor.fetchall()]
+        for qcol in ["q005", "q020", "q050", "q080", "q095"]:
+            if qcol not in fvc_columns:
+                cursor.execute(f"ALTER TABLE fvc ADD COLUMN {qcol} REAL;")
+                logger.info(f"Added {qcol} column to fvc table")
+        conn.commit()
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
     finally:

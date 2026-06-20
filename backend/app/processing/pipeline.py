@@ -347,13 +347,39 @@ def process_patient_segmentation(
                 )
                 logger.info(f"Updated database with features for patient {patient_id}")
 
-                # ML FVC Prediction
+                # ML FVC Prediction (central model + 5 quantile models)
                 model_dir = os.path.dirname(os.path.abspath(__file__))
-                model_path = os.path.join(model_dir, "..", "models", "model_fvc.json")
+                models_dir = os.path.join(model_dir, "..", "models")
+                model_path = os.path.join(models_dir, "model_fvc.json")
+
                 if os.path.exists(model_path):
-                    logger.info(f"Loading FVC prediction model from {model_path}")
+                    logger.info(f"Loading FVC central model from {model_path}")
                     model_fvc = xgb.XGBRegressor()
                     model_fvc.load_model(model_path)
+
+                    # Load the 5 quantile models (trained with reg:quantileerror)
+                    # q005 file → 2.5th percentile (lower bound IC 95%)
+                    # q020 file → 10th percentile  (lower bound IC 80%)
+                    # q050 file → 50th percentile  (median)
+                    # q080 file → 90th percentile  (upper bound IC 80%)
+                    # q095 file → 97.5th percentile (upper bound IC 95%)
+                    quantile_names = {
+                        0.025: "q005",
+                        0.10: "q020",
+                        0.50: "q050",
+                        0.90: "q080",
+                        0.975: "q095",
+                    }
+                    quantile_models = {}
+                    for q, qname in quantile_names.items():
+                        qpath = os.path.join(models_dir, f"model_{qname}.json")
+                        if os.path.exists(qpath):
+                            qm = xgb.XGBRegressor()
+                            qm.load_model(qpath)
+                            quantile_models[q] = qm
+                            logger.info(f"Loaded quantile model q={q} from {qpath}")
+                        else:
+                            logger.warning(f"Quantile model not found: {qpath}")
 
                     sex_male = 1 if sex == "M" else 0
                     smoking_ex_smoker = 1 if smoking_status == "Ex-smoker" else 0
@@ -363,27 +389,6 @@ def process_patient_segmentation(
                     base_percent = (
                         (fvc_baseline / optimal_fvc) * 100.0 if optimal_fvc > 0 else 0.0
                     )
-
-                    prediction_rows = []
-                    weeks = list(range(-12, 134))
-                    for w in weeks:
-                        weeks_delta = w - base_week
-                        row = {
-                            "Weeks": w,
-                            "Age": age,
-                            "Vol_Lung_cm3": lung_volume,
-                            "Mean_HU": mean_hu,
-                            "Std_HU": std_hu,
-                            "Fibrosis_Ratio": fibrosis_ratio,
-                            "Sex_Male": sex_male,
-                            "SmokingStatus_Ex-smoker": smoking_ex_smoker,
-                            "SmokingStatus_Never smoked": smoking_never_smoked,
-                            "Base_Week": base_week,
-                            "Base_FVC": fvc_baseline,
-                            "Base_Percent": base_percent,
-                            "Weeks_Delta": weeks_delta,
-                        }
-                        prediction_rows.append(row)
 
                     feature_cols = [
                         "Weeks",
@@ -400,29 +405,85 @@ def process_patient_segmentation(
                         "Base_Percent",
                         "Weeks_Delta",
                     ]
-                    df_pred = pd.DataFrame(prediction_rows, columns=feature_cols)
-                    preds_fvc = model_fvc.predict(df_pred)
 
-                    fvc_records = []
-                    for i, w in enumerate(weeks):
-                        pred_ml = float(preds_fvc[i])
-                        pred_liters = pred_ml / 1000.0
-
+                    weeks = list(range(-12, 134))
+                    prediction_rows = []
+                    for w in weeks:
                         weeks_delta = w - base_week
-                        sigma = 70 + 0.8 * abs(weeks_delta)
-                        confidence = max(0.1, 1.0 - (sigma - 70) / 300.0)
-
-                        fvc_records.append(
+                        prediction_rows.append(
                             {
-                                "week_num": w,
-                                "fvc": pred_liters,
-                                "confidence": confidence,
+                                "Weeks": w,
+                                "Age": age,
+                                "Vol_Lung_cm3": lung_volume,
+                                "Mean_HU": mean_hu,
+                                "Std_HU": std_hu,
+                                "Fibrosis_Ratio": fibrosis_ratio,
+                                "Sex_Male": sex_male,
+                                "SmokingStatus_Ex-smoker": smoking_ex_smoker,
+                                "SmokingStatus_Never smoked": smoking_never_smoked,
+                                "Base_Week": base_week,
+                                "Base_FVC": fvc_baseline,
+                                "Base_Percent": base_percent,
+                                "Weeks_Delta": weeks_delta,
                             }
                         )
 
+                    df_pred = pd.DataFrame(prediction_rows, columns=feature_cols)
+
+                    # Central FVC prediction (mL → L)
+                    preds_fvc = model_fvc.predict(df_pred)
+
+                    # Quantile predictions (all in mL, same scale as training)
+                    q_preds = {}
+                    for q, qm in quantile_models.items():
+                        q_preds[q] = qm.predict(df_pred)
+
+                    fvc_records = []
+                    for i, w in enumerate(weeks):
+                        pred_liters = float(preds_fvc[i]) / 1000.0
+
+                        # ML-derived confidence from IC 95% interval width
+                        # confidence = 1 - (Q97.5 - Q2.5) / (2 * max(Q50, 1))
+                        if 0.025 in q_preds and 0.975 in q_preds and 0.50 in q_preds:
+                            q_low95_ml = float(q_preds[0.025][i])  # IC 95% lower
+                            q_low80_ml = float(q_preds[0.10][i])  # IC 80% lower
+                            q050_ml = float(q_preds[0.50][i])  # median
+                            q_high80_ml = float(q_preds[0.90][i])  # IC 80% upper
+                            q_high95_ml = float(q_preds[0.975][i])  # IC 95% upper
+                            interval_width = max(q_high95_ml - q_low95_ml, 0.0)
+                            denominator = max(abs(q050_ml), 1.0) * 2.0
+                            confidence = float(
+                                max(0.01, min(0.99, 1.0 - interval_width / denominator))
+                            )
+                            fvc_records.append(
+                                {
+                                    "week_num": w,
+                                    "fvc": pred_liters,
+                                    "confidence": confidence,
+                                    # Quantile bounds in mL — IC 95% and IC 80%
+                                    "q005": q_low95_ml,  # 2.5th pct  → lower IC 95%
+                                    "q020": q_low80_ml,  # 10th pct   → lower IC 80%
+                                    "q050": q050_ml,  # median
+                                    "q080": q_high80_ml,  # 90th pct   → upper IC 80%
+                                    "q095": q_high95_ml,  # 97.5th pct → upper IC 95%
+                                }
+                            )
+                        else:
+                            # Fallback if quantile models are missing
+                            weeks_delta = w - base_week
+                            sigma = 70 + 0.8 * abs(weeks_delta)
+                            confidence = max(0.01, 1.0 - (sigma - 70) / 300.0)
+                            fvc_records.append(
+                                {
+                                    "week_num": w,
+                                    "fvc": pred_liters,
+                                    "confidence": confidence,
+                                }
+                            )
+
                     db_add_fvc_records(conn, patient_id, fvc_records)
                     logger.info(
-                        f"FVC prediction records successfully saved for patient {patient_id}"
+                        f"FVC prediction records (quantile ML confidence) saved for patient {patient_id}"
                     )
                 else:
                     logger.error(f"FVC prediction model file not found at {model_path}")

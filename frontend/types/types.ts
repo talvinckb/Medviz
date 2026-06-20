@@ -7,6 +7,12 @@ export interface FVCRecord {
   week_num: number;
   fvc: number;
   confidence: number;
+  // ML Quantile predictions (in mL — same unit as fvc * 1000)
+  q005?: number | null;
+  q020?: number | null;
+  q050?: number | null;
+  q080?: number | null;
+  q095?: number | null;
 }
 
 export interface PatientDetail {
