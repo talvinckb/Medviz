@@ -18,6 +18,8 @@ export function PulmoSightDashboard() {
   );
   const [patientData, setPatientData] = useState<PatientDetail | null>(null);
   const [isDicomModalOpen, setIsDicomModalOpen] = useState(false);
+  const [period, setPeriod] = useState<"3" | "6" | "12">("12");
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   // Fetch patient list on mount
   const loadPatients = useCallback(async () => {
@@ -27,6 +29,7 @@ export function PulmoSightDashboard() {
       setPatientIds(sortedIds);
       if (sortedIds.length > 0 && selectedPatientId === null) {
         setSelectedPatientId(sortedIds[0]);
+        setSelectedWeek(null);
       }
     } catch (error) {
       console.error("Failed to load patients", error);
@@ -58,6 +61,7 @@ export function PulmoSightDashboard() {
 
   const handleSelectPatient = useCallback((id: string) => {
     setSelectedPatientId(Number(id));
+    setSelectedWeek(null);
   }, []);
 
   const handleOpenDicomModal = useCallback(() => {
@@ -107,17 +111,38 @@ export function PulmoSightDashboard() {
   const fvcData = useMemo(() => {
     if (!patientData?.fvc_records) return [];
     return patientData.fvc_records.map((record) => {
-      // Reconstruct sigma (standard deviation in mL) from the confidence value
-      // confidence = max(0.1, 1.0 - (sigma - 70) / 300.0)
+      // Use ML quantile bounds directly if available (in mL → convert to L)
+      // q005 = Q2.5% (lower IC 95%), q020 = Q10% (lower IC 80%)
+      // q080 = Q90% (upper IC 80%), q095 = Q97.5% (upper IC 95%)
+      if (
+        record.q005 != null &&
+        record.q020 != null &&
+        record.q080 != null &&
+        record.q095 != null
+      ) {
+        return {
+          week: record.week_num,
+          fvc: record.fvc,
+          // IC 95% bounds [Q2.5, Q97.5] in liters
+          upper90: record.q095 / 1000,
+          lower90: Math.max(0, record.q005 / 1000),
+          // IC 80% bounds [Q10, Q90] in liters
+          upper60: record.q080 / 1000,
+          lower60: Math.max(0, record.q020 / 1000),
+          reliability: record.confidence * 100,
+        };
+      }
+      // Fallback: reconstruct sigma from confidence (old patients without quantile data)
       const sigma = 70 + 300 * (1 - record.confidence);
       const sigmaLiters = sigma / 1000.0;
-      // 95% confidence interval width is approximately 1.96 * sigma
       const margin = 1.96 * sigmaLiters;
       return {
         week: record.week_num,
         fvc: record.fvc,
-        upper: record.fvc + margin,
-        lower: Math.max(0, record.fvc - margin),
+        upper90: record.fvc + margin,
+        lower90: Math.max(0, record.fvc - margin),
+        upper60: record.fvc + margin * 0.65,
+        lower60: Math.max(0, record.fvc - margin * 0.65),
         reliability: record.confidence * 100,
       };
     });
@@ -234,13 +259,22 @@ export function PulmoSightDashboard() {
                     }
                     optimal_fvc={optimalFvc}
                     fvc_records={patientData?.fvc_records || []}
+                    period={period}
+                    selectedWeek={selectedWeek}
+                    onWeekChange={setSelectedWeek}
                   />
                 </div>
               </div>
 
               {/* Lower Section: Full-width FVC Prediction */}
               <div className="w-full min-h-120">
-                <FVCPrediction data={fvcData} fvc_optimal={optimalFvc} />
+                <FVCPrediction
+                  data={fvcData}
+                  fvc_optimal={optimalFvc}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  selectedWeek={selectedWeek}
+                />
               </div>
             </div>
           )}

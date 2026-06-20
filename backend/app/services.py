@@ -144,7 +144,7 @@ def db_get_patient_fvc_records(conn: sqlite3.Connection, patient_id: int) -> Lis
     """
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, week_num, fvc, confidence FROM fvc WHERE patient_id = ? ORDER BY week_num ASC",
+        "SELECT id, week_num, fvc, confidence, q005, q020, q050, q080, q095 FROM fvc WHERE patient_id = ? ORDER BY week_num ASC",
         (patient_id,),
     )
     rows = cursor.fetchall()
@@ -205,10 +205,23 @@ def db_add_fvc_records(
     # Bulk insert
     cursor.executemany(
         """
-        INSERT INTO fvc (patient_id, fvc, week_num, confidence)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO fvc (patient_id, fvc, week_num, confidence, q005, q020, q050, q080, q095)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [(patient_id, r["fvc"], r["week_num"], r["confidence"]) for r in records],
+        [
+            (
+                patient_id,
+                r["fvc"],
+                r["week_num"],
+                r["confidence"],
+                r.get("q005"),
+                r.get("q020"),
+                r.get("q050"),
+                r.get("q080"),
+                r.get("q095"),
+            )
+            for r in records
+        ],
     )
     conn.commit()
     logger.info(f"FVC prediction records added successfully for patient {patient_id}")

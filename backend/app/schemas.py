@@ -10,7 +10,14 @@ class FVCRecord(BaseModel):
     id: int = Field(..., description="ID FVC")
     week_num: int = Field(..., description="Numéro de la semaine de mesure")
     fvc: float = Field(..., description="FVC")
-    confidence: float = Field(..., description="Confiance de prédiction")
+    confidence: float = Field(..., description="Confiance de prédiction (ML-derived)")
+    # ML Quantile predictions (mL, same unit as fvc * 1000)
+    # Stored as: q005=Q2.5%, q020=Q10%, q050=Q50%, q080=Q90%, q095=Q97.5%
+    q005: Optional[float] = Field(None, description="Q2.5% — borne basse IC 95%")
+    q020: Optional[float] = Field(None, description="Q10% — borne basse IC 80%")
+    q050: Optional[float] = Field(None, description="Q50% — médiane")
+    q080: Optional[float] = Field(None, description="Q90% — borne haute IC 80%")
+    q095: Optional[float] = Field(None, description="Q97.5% — borne haute IC 95%")
 
     model_config = {"from_attributes": True}
 
@@ -64,8 +71,17 @@ class PatientDetail(BaseModel):
                 "zip_path": "patients_data/1/slices.zip",
                 "glb_path": "patients_data/1/lung.glb",
                 "fvc_records": [
-                    {"id": 10, "week_num": 1, "fvc": 3.2, "confidence": 0.95},
-                    {"id": 11, "week_num": 4, "fvc": 3.4, "confidence": 0.98},
+                    {
+                        "id": 10,
+                        "week_num": 1,
+                        "fvc": 3.2,
+                        "confidence": 0.85,
+                        "q005": 2800.0,
+                        "q020": 3000.0,
+                        "q050": 3200.0,
+                        "q080": 3400.0,
+                        "q095": 3600.0,
+                    },
                 ],
             }
         },
