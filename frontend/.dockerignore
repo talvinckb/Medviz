@@ -1,0 +1,16 @@
+# Dependencies (reinstalled in container)
+node_modules/
+
+# Build output (rebuilt in container)
+.next/
+
+# Environment
+.env*.local
+.env
+
+# Misc
+.git/
+.DS_Store
+.vercel/
+.snowflake/
+.v0-trash/
