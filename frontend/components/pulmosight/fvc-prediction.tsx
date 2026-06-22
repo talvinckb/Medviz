@@ -63,20 +63,81 @@ export function FVCPrediction({
     range60: [d.lower60, d.upper60] as [number, number],
   }));
 
-  const criticalThreshold = (fvc_optimal * 0.8) / 1000; // 80% of optimal FVC in liters
-
-  const maxVal = Math.max(
-    ...chartData.map((d) => Math.max(d.upper90 || 0, d.fvc || 0)),
-    4.0,
-  );
+  const dataMax =
+    chartData.length > 0
+      ? Math.max(...chartData.map((d) => Math.max(d.upper90 ?? d.fvc, d.fvc)))
+      : 4.0;
 
   const dataMin =
     chartData.length > 0
       ? Math.min(...chartData.map((d) => Math.min(d.lower90 ?? d.fvc, d.fvc)))
       : 1.5;
-  const rawMin = Math.min(dataMin, criticalThreshold);
-  const yMin = rawMin < 1.5 ? Math.max(0, Math.floor(rawMin * 10) / 10) : 1.5;
-  const yDomain = [yMin, maxVal > 4 ? Math.ceil(maxVal) : 4];
+
+  // Zoom tightly on data bounds with slight padding
+  const yDomain = [
+    Math.max(0, Math.floor((dataMin - 0.05) * 10) / 10),
+    Math.ceil((dataMax + 0.05) * 10) / 10,
+  ];
+
+  const hasOpt = fvc_optimal > 0;
+  const optL = fvc_optimal / 1000.0;
+  const fvcGreen = optL * (1 - 1.5 / 10);
+  const fvcYellow = optL * (1 - 2.5 / 10);
+  const fvcOrange = optL * (1 - 3.5 / 10);
+
+  const fvcValues = chartData.map((d) => d.fvc).filter((v) => v != null);
+  const maxFVC = fvcValues.length > 0 ? Math.max(...fvcValues) : 4;
+  const minFVC = fvcValues.length > 0 ? Math.min(...fvcValues) : 0;
+
+  const getOffset = (y: number) => {
+    if (maxFVC === minFVC) return 0;
+    const percent = (maxFVC - y) / (maxFVC - minFVC);
+    return Math.max(0, Math.min(100, percent * 100));
+  };
+
+  const offGreen = getOffset(fvcGreen);
+  const offYellow = getOffset(fvcYellow);
+  const offOrange = getOffset(fvcOrange);
+
+  const getScoreColor = (fvc: number) => {
+    if (!hasOpt) return "#3b82f6";
+    if (fvc <= fvcOrange) return "#F44336"; // Red
+    if (fvc <= fvcYellow) return "#FF9800"; // Orange
+    if (fvc <= fvcGreen) return "#FFB300"; // Yellow
+    return "#4CAF50"; // Green
+  };
+
+  const CustomDot = (props: any) => {
+    const { cx, cy, payload, key } = props;
+    const color = getScoreColor(payload.fvc);
+    return (
+      <circle
+        key={`dot-${key}`}
+        cx={cx}
+        cy={cy}
+        r={4}
+        fill={color}
+        stroke="white"
+        strokeWidth={1.5}
+      />
+    );
+  };
+
+  const CustomActiveDot = (props: any) => {
+    const { cx, cy, payload, key } = props;
+    const color = getScoreColor(payload.fvc);
+    return (
+      <circle
+        key={`activedot-${key}`}
+        cx={cx}
+        cy={cy}
+        r={6}
+        fill={color}
+        stroke="white"
+        strokeWidth={2}
+      />
+    );
+  };
 
   return (
     <Card className="h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
@@ -96,23 +157,25 @@ export function FVCPrediction({
           <div className="text-[13px] font-medium text-gray-600">FVC (L)</div>
         </div>
 
-        <Tabs
-          value={period}
-          onValueChange={(val) => onPeriodChange(val as any)}
-          className="w-auto"
-        >
-          <TabsList className="bg-gray-100/80 p-0.5 h-8">
-            <TabsTrigger value="3" className="text-xs px-2.5 h-7">
-              3 mois
-            </TabsTrigger>
-            <TabsTrigger value="6" className="text-xs px-2.5 h-7">
-              6 mois
-            </TabsTrigger>
-            <TabsTrigger value="12" className="text-xs px-2.5 h-7">
-              12 mois
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-6">
+          <Tabs
+            value={period}
+            onValueChange={(val) => onPeriodChange(val as any)}
+            className="w-auto"
+          >
+            <TabsList className="bg-gray-100/80 p-0.5 h-8">
+              <TabsTrigger value="3" className="text-xs px-2.5 h-7">
+                3 mois
+              </TabsTrigger>
+              <TabsTrigger value="6" className="text-xs px-2.5 h-7">
+                6 mois
+              </TabsTrigger>
+              <TabsTrigger value="12" className="text-xs px-2.5 h-7">
+                12 mois
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col p-0 pb-6 min-h-0">
@@ -149,6 +212,27 @@ export function FVCPrediction({
                 axisLine={false}
                 tickFormatter={(value) => value.toFixed(1)}
               />
+              <defs>
+                {hasOpt && (
+                  <linearGradient
+                    id="scoreGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="0%" stopColor="#4CAF50" />
+                    <stop offset={`${offGreen}%`} stopColor="#4CAF50" />
+                    <stop offset={`${offGreen}%`} stopColor="#FFB300" />
+                    <stop offset={`${offYellow}%`} stopColor="#FFB300" />
+                    <stop offset={`${offYellow}%`} stopColor="#FF9800" />
+                    <stop offset={`${offOrange}%`} stopColor="#FF9800" />
+                    <stop offset={`${offOrange}%`} stopColor="#F44336" />
+                    <stop offset="100%" stopColor="#F44336" />
+                  </linearGradient>
+                )}
+              </defs>
+
               <Tooltip content={<CustomTooltip />} />
 
               {/* IC 90% band [Q05, Q95] — wide, very light */}
@@ -169,20 +253,7 @@ export function FVCPrediction({
                 fillOpacity={0.18}
               />
 
-              <ReferenceLine
-                y={criticalThreshold}
-                stroke="#ef4444"
-                strokeDasharray="4 4"
-                strokeWidth={1.5}
-                label={{
-                  value: "Seuil critique",
-                  position: "insideBottomLeft",
-                  fill: "#ef4444",
-                  fontSize: 12,
-                  offset: 10,
-                }}
-              />
-
+              {/* Vertical Reference line for selected week */}
               {selectedWeek !== null && (
                 <ReferenceLine
                   x={selectedWeek}
@@ -195,10 +266,10 @@ export function FVCPrediction({
               <Line
                 type="monotone"
                 dataKey="fvc"
-                stroke="#3b82f6"
+                stroke={hasOpt ? "url(#scoreGradient)" : "#3b82f6"}
                 strokeWidth={2.5}
-                dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, fill: "#2563eb" }}
+                dot={<CustomDot />}
+                activeDot={<CustomActiveDot />}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -208,8 +279,18 @@ export function FVCPrediction({
         <div className="mt-8 flex flex-wrap items-center justify-center gap-5 text-[13px]">
           <div className="flex items-center gap-2">
             <div className="flex items-center relative w-6">
-              <div className="h-0.5 w-6 bg-blue-500 absolute top-1/2 -translate-y-1/2" />
-              <div className="h-2.5 w-2.5 rounded-full bg-blue-500 absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2" />
+              <div
+                className={`h-0.5 w-full absolute top-1/2 -translate-y-1/2 ${
+                  hasOpt
+                    ? "bg-linear-to-r from-[#4CAF50] via-[#FFEB3B] to-[#F44336]"
+                    : "bg-blue-500"
+                }`}
+              />
+              <div
+                className={`h-2.5 w-2.5 rounded-full absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 border border-white ${
+                  hasOpt ? "bg-[#FF9800]" : "bg-blue-500"
+                }`}
+              />
             </div>
             <span className="text-gray-600 font-medium">FVC prédite</span>
           </div>
@@ -222,10 +303,6 @@ export function FVCPrediction({
             <span className="text-gray-600 font-medium">
               IC 95% [Q2.5–Q97.5]
             </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-0.5 w-6 border-t-2 border-dashed border-red-400" />
-            <span className="text-gray-600 font-medium">Seuil critique</span>
           </div>
         </div>
 
@@ -288,6 +365,20 @@ function CustomTooltip({
     const fvcPoint = payload.find((p) => p.dataKey === "fvc");
     const fvcValue = fvcPoint?.value as number | undefined;
     const meta = fvcPoint?.payload;
+
+    // Always calculate reliability based on lower and upper bounds
+    // It must be a number between 0 and 100, or undefined if not available
+    const reliability =
+      meta?.lower60 != null && meta?.upper60 != null && fvcValue != null
+        ? Math.max(
+            0,
+            Math.min(
+              100,
+              100 - ((meta.upper60 - meta.lower60) / fvcValue) * 100,
+            ),
+          )
+        : undefined;
+
     return (
       <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-md min-w-[170px]">
         <p className="mb-1 text-sm font-medium text-gray-800">
@@ -311,7 +402,7 @@ function CustomTooltip({
         <p className="mt-1 text-xs text-gray-500">
           Fiabilité :{" "}
           <span className="font-semibold text-gray-700">
-            {meta?.reliability?.toFixed(0)}%
+            {reliability?.toFixed(0)}%
           </span>
         </p>
       </div>
