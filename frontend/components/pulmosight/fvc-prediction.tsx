@@ -380,7 +380,7 @@ function CustomTooltip({
         : undefined;
 
     return (
-      <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-md min-w-[170px]">
+      <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-md min-w-42.5">
         <p className="mb-1 text-sm font-medium text-gray-800">
           Semaine {label}
         </p>

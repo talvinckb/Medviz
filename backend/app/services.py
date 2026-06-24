@@ -75,7 +75,8 @@ def db_add_patient(
         elif files:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 for f in files:
-                    zipf.writestr(f.filename, f.file.read())
+                    if f.filename:
+                        zipf.writestr(f.filename, f.file.read())
             logger.info(
                 f"Created ZIP file from {len(files)} files for patient {patient_id} at {zip_path}"
             )
