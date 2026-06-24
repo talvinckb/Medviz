@@ -70,6 +70,16 @@ backend-test:
   coverage: '/TOTAL.*\s+(\d+%)$/'
   <<: *backend-changes
 
+backend-typecheck:
+  stage: test
+  image: python:3.13-slim
+  script:
+    - pip install uv
+    - cd backend
+    - uv sync
+    - uv run ty check app tests
+  <<: *backend-changes
+
 frontend-typecheck:
   stage: test
   <<: *pnpm-setup
