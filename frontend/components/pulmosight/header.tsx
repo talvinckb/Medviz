@@ -30,6 +30,17 @@ function InfoBadge({ label, value }: { label: string; value: string }) {
 export function Header({ patientId, patientInfo, onDelete }: HeaderProps) {
   const hasInfo = patientId && patientInfo;
 
+  const SmokingStatusMap: Record<string, string> = {
+    "Never smoked": "Non-fumeur",
+    "Ex-smoker": "Ancien fumeur",
+    "Current smoker": "Fumeur actuel",
+  };
+
+  const smokingStatus =
+    SmokingStatusMap[patientInfo?.smoking_status || ""] ||
+    patientInfo?.smoking_status ||
+    "Inconnu";
+
   return (
     <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
       <div className="flex items-center gap-3 min-w-0">
@@ -65,7 +76,7 @@ export function Header({ patientId, patientInfo, onDelete }: HeaderProps) {
                     />
                   )}
                 {patientInfo?.smoking_status && (
-                  <InfoBadge label="Tabac" value={patientInfo.smoking_status} />
+                  <InfoBadge label="Tabac" value={smokingStatus} />
                 )}
               </div>
             </>

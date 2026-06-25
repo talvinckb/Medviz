@@ -103,6 +103,9 @@ export function LungVisualization({
     { icon: RefreshCw, label: "Réinitialiser", onClick: handleReset },
   ];
 
+  const lungVolumeLitter =
+    lung_volume !== undefined ? (lung_volume * 0.001).toFixed(2) : "N/A";
+
   return (
     <Card className="relative h-full flex flex-col rounded-xl border border-gray-100 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-6 gap-4">
@@ -112,7 +115,7 @@ export function LungVisualization({
         {lung_volume !== undefined && lung_volume > 0 && (
           <div className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-md font-semibold border border-blue-100">
             Volume pulmonaire :{" "}
-            <span className="font-bold">{lung_volume.toFixed(2)} mL</span>
+            <span className="font-bold">{lungVolumeLitter} L</span>
           </div>
         )}
       </CardHeader>

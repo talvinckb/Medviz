@@ -350,7 +350,8 @@ def process_patient_segmentation(
                 # ML FVC Prediction (central model + 5 quantile models)
                 model_dir = os.path.dirname(os.path.abspath(__file__))
                 models_dir = os.path.join(model_dir, "..", "models")
-                model_path = os.path.join(models_dir, "model_fvc.json")
+                # model_path = os.path.join(models_dir, "model_fvc.json")
+                model_path = os.path.join(models_dir, "model_q050.json")
 
                 if os.path.exists(model_path):
                     logger.info(f"Loading FVC central model from {model_path}")
