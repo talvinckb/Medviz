@@ -1,8 +1,32 @@
 # MedViz SAE Project
 
-MedViz est une application de visualisation et d'analyse de données médicales (DICOM vers 3D, prédiction FVC, etc.). Elle se compose d'un backend en Python (FastAPI) et d'un frontend web (Next.js).
+MedViz est une application de visualisation et d'analyse de données médicales (conversion DICOM vers 3D, prédiction de la FVC). Le projet comprend un backend en Python (FastAPI) pour le traitement d'images et un frontend en Next.js.
 
-## Démarrage rapide avec Docker (Recommandé)
+## Aperçu de l'interface
+
+![Interface Utilisateur de Medviz](images/interface-utilisateur.png)
+
+## Pipeline de traitement (Segmentation 3D)
+
+Traitement des coupes scanner (CT Scans) pour isoler les structures pulmonaires et les zones d'intérêt.
+
+![Étapes de Segmentation](images/segmantation-steps.png)
+
+## Prédictions FVC
+
+Modélisation et prédiction de la Capacité Vitale Forcée (FVC) du patient au fil du temps.
+
+![Prédiction FVC](images/predictions.png)
+
+## Architecture et CI/CD
+
+Pipeline de conteneurisation Docker et d'intégration continue.
+
+![Pipeline CI/CD](images/pipeline-cicd.png)
+
+---
+
+## Démarrage rapide avec Docker
 
 Le projet est entièrement "dockerisé" pour faciliter son déploiement et garantir que l'environnement d'exécution soit identique pour tous.
 
@@ -37,33 +61,6 @@ L'application utilise un volume Docker nommé (`medviz_data`) pour stocker la ba
 
 ---
 
-## Développement en local (Sans Docker)
+## Origine du projet et migration
 
-Si vous souhaitez travailler sur le code et tester vos modifications sans Docker, l'environnement local et l'environnement Docker sont complètement séparés.
-
-### 1. Backend (FastAPI)
-
-Le backend utilise Python et `uv` comme gestionnaire de dépendances.
-
-```bash
-cd backend
-# Exécution du serveur de développement (gère l'installation des dépendances)
-uv run python main.py
-```
-
-Le backend tourne sur `http://localhost:8000` avec rechargement automatique à chaque modification de code.
-_Note : La base de données de test locale (`medviz.db`) sera créée directement dans le dossier `backend/`._
-
-### 2. Frontend (Next.js)
-
-Le frontend utilise Node.js et `pnpm`.
-
-```bash
-cd frontend
-# Installation des dépendances
-pnpm install
-# Lancement du serveur de développement
-pnpm dev
-```
-
-Le frontend tourne sur `http://localhost:3000`.
+Ce projet a été initialement développé dans le cadre académique (EPITA) sur une instance GitLab privée avec GitLab CI. Il a ensuite été migré sur GitHub. L'historique des Merge Requests et l'ensemble des métadonnées d'origine sont conservés dans le fichier [MIGRATION_REPORT.md](MIGRATION_REPORT.md).
